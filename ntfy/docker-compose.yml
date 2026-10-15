@@ -10,6 +10,8 @@ services:
     volumes:
       - /data/ntfy/cache:/var/cache/ntfy
       - /data/ntfy/etc:/etc/ntfy
+    env_file:
+      - /data/ntfy/.env
     environment:
       - TZ=Asia/Shanghai
     mem_limit: 192m

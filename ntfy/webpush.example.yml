@@ -1,0 +1,7 @@
+# Web Push VAPID 密钥（ntfy webpush keys 生成）
+# ⚠️ 私钥不入库（仓库公开）；VM100 实际值在 /data/ntfy/.env
+# ⚠️ 密钥对与域名绑定，换了需浏览器清通知权限重订（docs 警告不建议更换）
+web-push-public-key: "BL7e47Rue2h9Wfcl0cMhvElIW2Z046K891nQP9uWuvOMdPDqx_zsCJwCWVeRmpD48Gs86t8tt5U3VkU3ymLg3_w"
+web-push-private-key: "<NTFY_WEB_PUSH_PRIVATE_KEY>"
+web-push-file: "/var/cache/ntfy/webpush.db"
+web-push-email-address: "<ADMIN_EMAIL>"

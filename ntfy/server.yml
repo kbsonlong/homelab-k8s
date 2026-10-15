@@ -6,16 +6,20 @@
 #   auth-file: "/var/cache/ntfy/user.db"
 #   auth-default-access: "deny-all"
 
-base-url: "http://192.168.3.16:2586"
+# iOS 推送要求 base-url 与 App 内订阅的服务器地址【完全一致】
+base-url: "https://ntfy.kbsonlong.com"
+# iOS 即时推送：自托管服务器必须把 poll_request 转发给 ntfy.sh（经 APNs 唤醒 iOS App）
+# 不配则锁屏不弹，延迟可达数小时。见 https://docs.ntfy.sh/config/#ios-instant-notifications
+upstream-base-url: "https://ntfy.sh"
 listen_http: ":80"
+# 经 Cloudflare Tunnel 反代：必须开启，否则所有访客共享同一限流桶
+behind_proxy: true
 
 cache_file: "/var/cache/ntfy/cache.db"
 cache-duration: "12h"
 
 attachment_cache_dir: "/var/cache/ntfy/attachments"
 attachment-expiry-duration: "12h"
-
-behind_proxy: false
 
 keepalive_interval: "45s"
 
