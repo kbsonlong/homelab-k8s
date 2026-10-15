@@ -1,6 +1,6 @@
-# 部署文档
+# 已有 k3s 集群的应用部署
 
-## 1. 前置条件
+本文适用于已经拥有可用 kubeconfig 和至少一个 `Ready` 节点的集群。若需要从创建 VM、安装 k3s 开始，请先阅读 [`01-from-vm-to-k3s.md`](01-from-vm-to-k3s.md)。
 
 本机需要：`kubectl`、`helm`、`curl`、`python3`、`git`、`bash`。部署机需要已经拥有目标集群 kubeconfig；本仓库不会生成或上传 kubeconfig。
 

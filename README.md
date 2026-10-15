@@ -29,7 +29,8 @@ VIP 192.168.3.241  (四层例外)
 ## 目录
 
 - `docs/architecture.md`：拓扑、流量模型、VIP 规划和选型依据
-- `docs/deployment.md`：从零开始的部署步骤、代理、密码和回滚
+- `docs/01-from-vm-to-k3s.md`：新人教程索引；每个阶段拆在 `docs/01-*.md` 至 `docs/15-*.md`
+- `docs/deployment.md`：已有 k3s 集群的应用部署步骤、代理、密码和回滚
 - `docs/operations.md`：日常运维、扩展 HTTPRoute、四层服务和故障排查
 - `config/cilium/`：LB IP pool 与 L2 announcement policy
 - `config/gateway/`：共享 Gateway 和 HTTPRoute 模板
