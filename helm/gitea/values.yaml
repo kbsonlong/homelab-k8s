@@ -1,0 +1,77 @@
+replicaCount: 1
+
+image:
+  registry: docker.gitea.com
+  repository: gitea
+  tag: "1.27.0"
+  pullPolicy: IfNotPresent
+
+service:
+  http:
+    type: ClusterIP
+    port: 3000
+  ssh:
+    type: LoadBalancer
+    port: 22
+
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: local-path
+  claimName: gitea-shared-storage
+
+postgresql:
+  enabled: true
+  global:
+    storageClass: local-path
+    postgresql:
+      auth:
+        username: gitea
+        database: gitea
+        existingSecret: gitea-postgresql-auth
+  primary:
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: local-path
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
+    tag: "16-debian-12"
+
+postgresql-ha:
+  enabled: false
+valkey:
+  enabled: false
+valkey-cluster:
+  enabled: false
+
+# Web traffic is owned by the shared Gateway. SSH remains the L4 exception.
+ingress:
+  enabled: false
+gatewayAPI:
+  enabled: false
+
+gitea:
+  admin:
+    existingSecret: gitea-admin-auth
+    email: admin@example.invalid
+    passwordMode: keepUpdated
+  additionalConfigFromEnvs:
+    - name: GITEA__DATABASE__PASSWD
+      valueFrom:
+        secretKeyRef:
+          name: gitea-postgresql-auth
+          key: password
+  config:
+    database:
+      DB_TYPE: postgres
+    server:
+      DOMAIN: gitea.${BASE_DOMAIN}
+      ROOT_URL: http://gitea.${BASE_DOMAIN}/
+      SSH_PORT: 22
+      SSH_LISTEN_PORT: 2222
+    service:
+      DISABLE_REGISTRATION: true
+    other:
+      SHOW_FOOTER_VERSION: false

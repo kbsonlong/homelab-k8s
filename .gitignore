@@ -1,0 +1,18 @@
+# Local secrets and environment
+.env
+.env.*
+!.env.example
+
+# Generated files
+.generated/
+rendered/
+*.log
+.DS_Store
+
+# Terraform/state-like artifacts
+*.tfstate
+*.tfstate.*
+
+# Editor/OS
+.idea/
+.vscode/

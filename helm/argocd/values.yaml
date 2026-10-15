@@ -1,0 +1,17 @@
+server:
+  service:
+    type: ClusterIP
+  extraArgs:
+    - --insecure
+  ingress:
+    enabled: false
+
+configs:
+  params:
+    server.insecure: true
+  cm:
+    admin.enabled: true
+
+# Do not create an Ingress or a second external entrypoint.
+ingress:
+  enabled: false
