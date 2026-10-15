@@ -5,6 +5,9 @@
 # 收紧时在此追加：
 #   auth-file: "/var/cache/ntfy/user.db"
 #   auth-default-access: "deny-all"
+# ↑ 已于 2026-10-15 启用（见下）
+auth-file: "/var/cache/ntfy/user.db"
+auth-default-access: "deny-all"
 
 # iOS 推送要求 base-url 与 App 内订阅的服务器地址【完全一致】
 base-url: "https://ntfy.kbsonlong.com"
