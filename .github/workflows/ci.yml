@@ -34,4 +34,10 @@ jobs:
           PY
       - name: Secret scan
         run: |
-          ! grep -RInE 'gitea123|-35B0|GITEA_ADMIN_PASSWORD=.+|GITEA_DB_PASSWORD=.+' --exclude-dir=.git --exclude-dir=rendered --exclude-dir=.github --exclude='.env.example' .
+          ! grep -RInE \
+            'gitea123|-35B0|GITEA_ADMIN_PASSWORD=.+|GITEA_DB_PASSWORD=.+' \
+            --exclude-dir=.git \
+            --exclude-dir=rendered \
+            --exclude-dir=.github \
+            --exclude='.env.example' \
+            .
