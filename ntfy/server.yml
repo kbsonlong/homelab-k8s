@@ -1,0 +1,22 @@
+# ntfy server config (VM100, LAN only)
+# Docs: https://docs.ntfy.sh/config/
+# LAN 直连 + 无公网暴露
+# 认证默认关闭（auth-default-access: deny-unless 系列未启用），
+# 收紧时在此追加：
+#   auth-file: "/var/cache/ntfy/user.db"
+#   auth-default-access: "deny-all"
+
+base-url: "http://192.168.3.16:2586"
+listen_http: ":80"
+
+cache_file: "/var/cache/ntfy/cache.db"
+cache-duration: "12h"
+
+attachment_cache_dir: "/var/cache/ntfy/attachments"
+attachment-expiry-duration: "12h"
+
+behind_proxy: false
+
+keepalive_interval: "45s"
+
+log-level: "INFO"
