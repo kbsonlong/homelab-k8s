@@ -10,11 +10,12 @@
 | Metrics | vmagent（VMServiceScrape/VMNodeScrape 自动发现，默认已抓 kubelet/ksm/node-exporter/coredns 等） | vmsingle (v1.153.0) | PVC 6Gi，14d | svc :8428（vmui） |
 | Logs | vlagent（k8sCollector 经 K8s API 抓全集群容器日志，无需 DaemonSet） | vlsingle (v1.53.0) | PVC 4Gi，7d | svc :9428 |
 | Traces | 应用直发 OTLP gRPC | vtsingle (v0.10.0) | PVC 2Gi，7d | svc :10428（HTTP/Jaeger）+ `vtsingle-otlp-grpc` :4317 |
-| 看板 | — | Grafana（PVC 1Gi） | — | **LB VIP http://192.168.3.240** |
+| 看板 | — | Grafana（PVC 1Gi） | — | HTTPRoute `grafana.${BASE_DOMAIN}` → 共享 lab-gateway (**192.168.3.243**) |
 
 - 数据组件全部 `nodeSelector: kubernetes.io/hostname: colima`（local-path PVC 节点绑定 + 内存充足）。
 - vmalert / alertmanager / defaultRules 已关闭：告警链路独立于集群（ntfy @ VM100），先看板后告警。
-- Grafana 经 Cilium LB-IPAM 从 VIP 池 192.168.3.240-249 静态取 240；LAN 直连，无公网暴露。
+- Grafana 是七层 HTTP 服务，按集群架构约定走共享 Gateway（`lab-gateway` @ 192.168.3.243）+ HTTPRoute（`helm/victoriametrics/grafana-httproute.yaml.in`，`scripts/render.sh` 替换 `${BASE_DOMAIN}`）；**LB VIP 池只留给真实 TCP/UDP 四层服务**，勿为 HTTP 服务申请独立 LoadBalancer。
+- LAN 内未配 DNS：`curl --resolve grafana.kbsonlong.com:80:192.168.3.243 ...` 或在客户端 hosts 加记录。
 - 磁盘预算 13Gi / colima root 盘 ~17G 可用；local-path 是 sparse 文件，`df` 短期看不出增长属正常。
 
 ## 部署 / 升级
@@ -27,6 +28,7 @@ helm upgrade --install vmk8s oci://ghcr.io/victoriametrics/helm-charts/victoria-
   --version 0.95.2 -n monitoring --create-namespace \
   -f helm/victoriametrics/values.yaml
 kubectl apply -f helm/victoriametrics/vtsingle-otlp-grpc-svc.yaml
+./scripts/render.sh && kubectl apply -f rendered/grafana-httproute.yaml   # 七层入口挂共享 lab-gateway
 ```
 
 ## 已知坑（重新部署必读）
@@ -42,11 +44,12 @@ kubectl apply -f helm/victoriametrics/vtsingle-otlp-grpc-svc.yaml
 ```bash
 kubectl -n monitoring get pods          # 10 Running + sync-job Completed
 kubectl -n monitoring get pvc           # 4 个 Bound (6G/4G/2G/1G)
-curl http://192.168.3.240/api/health    # 200（L2 VIP 不回 ping，属正常）
+curl --resolve grafana.kbsonlong.com:80:192.168.3.243 http://grafana.kbsonlong.com/api/health    # 200
 
 # 三数据源健康（Grafana API）
+GW='--resolve grafana.kbsonlong.com:80:192.168.3.243'
 PW="$(kubectl -n monitoring get secret vmk8s-grafana -o jsonpath='{.data.admin-user}' | base64 -d):$(kubectl -n monitoring get secret vmk8s-grafana -o jsonpath='{.data.admin-password}' | base64 -d)"
-for uid in VictoriaMetrics VictoriaLogs VictoriaTraces; do curl -su "$PW" http://192.168.3.240/api/datasources/uid/$uid/health; echo; done
+for uid in VictoriaMetrics VictoriaLogs VictoriaTraces; do curl -su "$PW" $GW http://grafana.kbsonlong.com/api/datasources/uid/$uid/health; echo; done
 
 # 数据面（集群内临时 pod）
 kubectl run nc --rm -i --restart=Never --image=curlimages/curl:8.16.0 -- \
@@ -56,7 +59,7 @@ kubectl run nc --rm -i --restart=Never --image=curlimages/curl:8.16.0 -- \
 
 ## 使用
 
-- **Grafana**: http://192.168.3.240，admin 密码见上；预置 20+ k8s dashboards（sync-job 生成）。
+- **Grafana**: `http://grafana.kbsonlong.com`（经 lab-gateway 192.168.3.243，LAN 内需 hosts/--resolve），admin 密码见上；预置 20+ k8s dashboards（sync-job 生成）。
 - **应用埋点 traces**: OTLP gRPC → `vtsingle-otlp-grpc.monitoring.svc:4317`（insecure）。
 - **应用 metrics 接入**: 创建 `VMServiceScrape` CR 即被 vmagent 自动抓取，无需改 vmagent。
 - **日志**: 零配置，vlagent 自动抓全部 namespace 容器日志。

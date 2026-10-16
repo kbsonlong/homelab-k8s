@@ -1,0 +1,22 @@
+# Grafana 七层入口: 共享 lab-gateway + HTTPRoute (集群架构约定: HTTP 走 Gateway, LB VIP 只留给真实 TCP/UDP)
+# ${BASE_DOMAIN} 由 scripts/render.sh 替换 (默认 kbsonlong.com); LAN 内未配 DNS, 用 curl --resolve 访问
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana-ui
+  namespace: monitoring
+spec:
+  parentRefs:
+    - name: lab-gateway
+      namespace: cilium-gateway
+      sectionName: http
+  hostnames:
+    - grafana.${BASE_DOMAIN}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: vmk8s-grafana
+          port: 80

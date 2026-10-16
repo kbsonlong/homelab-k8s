@@ -93,7 +93,7 @@ vtsingle:
         requests:
           storage: 2Gi
 
-# --- Grafana: LAN VIP 直连, 插件支撑 VictoriaLogs 数据源 ---
+# --- Grafana: 七层 HTTP 走共享 Gateway + HTTPRoute (见 grafana-httproute.yaml.in), 不占 LB VIP ---
 grafana:
   nodeSelector:
     kubernetes.io/hostname: colima
@@ -103,6 +103,3 @@ grafana:
     type: pvc
     enabled: true
     size: 1Gi
-  service:
-    type: LoadBalancer
-    loadBalancerIP: 192.168.3.240

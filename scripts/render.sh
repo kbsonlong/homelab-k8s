@@ -18,5 +18,6 @@ for src, dst in [('config/cilium/lb.yaml.in', 'rendered/cilium.yaml'), ('config/
 PY
 cp "$ROOT_DIR/config/gateway/gateway-api-crds.txt" "$ROOT_DIR/rendered/gateway-api-crds.txt"
 sed "s/\${BASE_DOMAIN}/$BASE_DOMAIN/g" "$ROOT_DIR/helm/gitea/values.yaml" > "$ROOT_DIR/rendered/gitea-values.yaml"
+sed "s/\${BASE_DOMAIN}/$BASE_DOMAIN/g" "$ROOT_DIR/helm/victoriametrics/grafana-httproute.yaml.in" > "$ROOT_DIR/rendered/grafana-httproute.yaml"
 cp "$ROOT_DIR/helm/argocd/values.yaml" "$ROOT_DIR/rendered/argocd-values.yaml"
 printf 'Rendered manifests and Helm values under rendered/\n'
