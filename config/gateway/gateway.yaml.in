@@ -4,6 +4,14 @@ metadata:
   name: cilium
 spec:
   controllerName: io.cilium/gateway-controller
+  # HTTP access log -> CiliumGatewayClassConfig below; details in docs/gateway-access-log.md.
+  # Field is co-managed: cilium chart owns the object (gatewayAPI.gatewayClass.create=auto),
+  # helm 3-way merge keeps this kubectl-added field across upgrades.
+  parametersRef:
+    group: cilium.io
+    kind: CiliumGatewayClassConfig
+    name: gateway-access-log
+    namespace: cilium-gateway
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -61,3 +69,37 @@ spec:
       backendRefs:
         - name: gitea-http
           port: 3000
+---
+# HTTP access log: JSON -> cilium-envoy DaemonSet stdout (verified 2026-10-16, Cilium 1.20.2).
+# Query/rollback: docs/gateway-access-log.md. NOTE: CRD is v2alpha1, re-check on Cilium upgrades.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumGatewayClassConfig
+metadata:
+  name: gateway-access-log
+  namespace: cilium-gateway
+spec:
+  telemetry:
+    accessLogs:
+      - format: JSON
+        targets:
+          - HTTP
+        json:
+          timestamp: "%START_TIME%"
+          gateway: "%CILIUM_GATEWAY_NAME%"
+          gateway_namespace: "%CILIUM_GATEWAY_NAMESPACE%"
+          client_ip: "%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%"
+          x_forwarded_for: "%REQ(X-FORWARDED-FOR)%"
+          host: "%REQ(:AUTHORITY)%"
+          method: "%REQ(:METHOD)%"
+          protocol: "%PROTOCOL%"
+          uri: "%REQ(:PATH)%"
+          user_agent: "%REQ(USER-AGENT)%"
+          request_id: "%REQ(X-REQUEST-ID)%"
+          status: "%RESPONSE_CODE%"
+          response_flags: "%RESPONSE_FLAGS%"
+          bytes_received: "%BYTES_RECEIVED%"
+          bytes_sent: "%BYTES_SENT%"
+          duration_ms: "%DURATION%"
+          upstream_service_time: "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%"
+          upstream_host: "%UPSTREAM_HOST%"
+          upstream_cluster: "%UPSTREAM_CLUSTER%"
