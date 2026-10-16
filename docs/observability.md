@@ -16,6 +16,9 @@
 - vmalert / alertmanager / defaultRules 已关闭：告警链路独立于集群（ntfy @ VM100），先看板后告警。
 - Grafana 是七层 HTTP 服务，按集群架构约定走共享 Gateway（`lab-gateway` @ 192.168.3.243）+ HTTPRoute（`helm/victoriametrics/grafana-httproute.yaml.in`，`scripts/render.sh` 替换 `${BASE_DOMAIN}`）；**LB VIP 池只留给真实 TCP/UDP 四层服务**，勿为 HTTP 服务申请独立 LoadBalancer。
 - LAN 内未配 DNS：`curl --resolve grafana.kbsonlong.com:80:192.168.3.243 ...` 或在客户端 hosts 加记录。
+- ⚠️ **浏览器直访必须先加 hosts，否则重定向循环**：公网 Cloudflare 上存在 `*.kbsonlong.com` 通配解析（指向 CF 边缘），hosts 未加时浏览器解析去 CF，被 301 → https 后无源站路由（cf-tunnel 只配了 ntfy），表现为 ERR_TOO_MANY_REDIRECTS。修复（每台客户端）：
+  `echo '192.168.3.243 grafana.kbsonlong.com gitea.kbsonlong.com argocd.kbsonlong.com' | sudo tee -a /etc/hosts`
+  **勿加 ntfy.kbsonlong.com**（走公网 cf-tunnel，加了会断推送）。Chrome 开启「安全 DNS」可能绕过 hosts，必要时关闭。
 - 磁盘预算 13Gi / colima root 盘 ~17G 可用；local-path 是 sparse 文件，`df` 短期看不出增长属正常。
 
 ## 部署 / 升级
