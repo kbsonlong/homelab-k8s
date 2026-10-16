@@ -1,0 +1,20 @@
+# 集群内 OTLP gRPC 接入点: 应用/OTel Collector 用 vtsingle-otlp-grpc.monitoring.svc:4317
+# (helm 管理的 svc 只暴露 10428 http, 4317 由 vtsingle.spec.extraArgs 开启, 独立 svc 路由)
+apiVersion: v1
+kind: Service
+metadata:
+  name: vtsingle-otlp-grpc
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: vtsingle
+    app.kubernetes.io/instance: vmk8s-victoria-metrics-k8s-stack
+    app.kubernetes.io/component: otlp-grpc
+spec:
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: vtsingle
+    app.kubernetes.io/instance: vmk8s-victoria-metrics-k8s-stack

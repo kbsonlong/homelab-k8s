@@ -1,0 +1,108 @@
+# VictoriaMetrics K8s Stack — homelab 可观测性 (metrics/logs/traces 单实例 + Grafana)
+# 集群: k3s (colima arm64 server + lab-node amd64 agent), Cilium LB-IPAM VIP 池 192.168.3.240-249
+# 磁盘预算: vmsingle 6Gi + vlsingle 4Gi + vtsingle 2Gi + grafana 1Gi = 13Gi / colima 17G 可用
+# 数据组件全部固定 colima 节点 (local-path PVC 节点绑定, 内存大)
+
+# --- sync-job 走 v2ray 代理拉 GitHub dashboards (集群内直连被墙) ---
+syncJob:
+  env:
+    - name: HTTPS_PROXY
+      value: "http://192.168.3.16:1087"
+    - name: HTTP_PROXY
+      value: "http://192.168.3.16:1087"
+    - name: NO_PROXY
+      value: "kubernetes.default.svc,.svc,.cluster.local,10.0.0.0/8,192.168.3.0/24"
+
+# --- 规则/告警: 告警链路已有 ntfy (VM100, 集群外), 先看板后告警 ---
+defaultRules:
+  create: false
+vmalert:
+  enabled: false
+alertmanager:
+  enabled: false
+vmanomaly:
+  enabled: false
+
+# --- Metrics: vmsingle + vmagent(自动抓 kubelet/kube-proxy/coredns 等) ---
+vmsingle:
+  spec:
+    retentionPeriod: "14d"
+    nodeSelector:
+      kubernetes.io/hostname: colima
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1536Mi
+    storage:
+      resources:
+        requests:
+          storage: 6Gi
+
+# --- Logs: vlsingle + vlagent(k8sCollector 经 K8s API 采集容器日志) ---
+vlagent:
+  enabled: true
+  spec:
+    k8sCollector:
+      enabled: true
+    nodeSelector:
+      kubernetes.io/hostname: colima
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 384Mi
+
+vlsingle:
+  enabled: true
+  spec:
+    retentionPeriod: "7d"
+    nodeSelector:
+      kubernetes.io/hostname: colima
+    resources:
+      requests:
+        cpu: 50m
+        memory: 192Mi
+      limits:
+        memory: 512Mi
+    storage:
+      resources:
+        requests:
+          storage: 4Gi
+
+# --- Traces: vtsingle (OTLP gRPC :4317 接收, Jaeger 兼容查询 API) ---
+vtsingle:
+  enabled: true
+  spec:
+    retentionPeriod: "7"
+    extraArgs:
+      otlpGRPCListenAddr: ":4317"
+      otlpGRPC.tls: "false"
+    nodeSelector:
+      kubernetes.io/hostname: colima
+    resources:
+      requests:
+        cpu: 50m
+        memory: 256Mi
+      limits:
+        memory: 768Mi
+    storage:
+      resources:
+        requests:
+          storage: 2Gi
+
+# --- Grafana: LAN VIP 直连, 插件支撑 VictoriaLogs 数据源 ---
+grafana:
+  nodeSelector:
+    kubernetes.io/hostname: colima
+  plugins:
+    - victoriametrics-logs-datasource
+  persistence:
+    type: pvc
+    enabled: true
+    size: 1Gi
+  service:
+    type: LoadBalancer
+    loadBalancerIP: 192.168.3.240
