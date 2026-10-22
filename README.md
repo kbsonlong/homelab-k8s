@@ -34,6 +34,7 @@ VIP 192.168.3.241  (四层例外)
 - `docs/operations.md`：日常运维、扩展 HTTPRoute、四层服务和故障排查
 - `docs/gateway-access-log.md`：Gateway HTTP 访问日志（JSON → Envoy stdout）配置、查询与回滚
 - `docs/observability.md`：可观测性栈（VictoriaMetrics metrics/logs/traces + Grafana）部署、坑与验证
+- `docs/go2rtc-mac-mini.md`：Mac mini 原生 go2rtc 与小米摄像头接入
 - `config/cilium/`：LB IP pool 与 L2 announcement policy
 - `config/gateway/`：共享 Gateway 和 HTTPRoute 模板
 - `helm/`：Argo CD、Gitea 的固定 values
