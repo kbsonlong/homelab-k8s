@@ -2,7 +2,7 @@
 
 ## Scope
 
-Run go2rtc natively on the Apple Silicon Mac mini to ingest the Xiaomi Smart Camera 3 PTZ (`chuangmi.camera.069a01`) through the Xiaomi Mi Home source. go2rtc handles camera connectivity and stream restreaming; it does not perform face recognition.
+Run go2rtc natively on the Apple Silicon Mac mini to ingest Xiaomi cameras through the Xiaomi Mi Home source. go2rtc handles camera connectivity and stream restreaming; it does not perform face recognition.
 
 ## Current lab deployment
 
@@ -20,9 +20,11 @@ Run go2rtc natively on the Apple Silicon Mac mini to ingest the Xiaomi Smart Cam
 
 ## Xiaomi camera support
 
-`chuangmi.camera.069a01` is listed in the go2rtc known Xiaomi camera list as Xiaomi Smart Camera 3 PTZ Version, using `cs2+tcp`, HEVC video and Opus audio. The `v1.9.14` release includes modern Xiaomi source improvements and a captcha login fix.
+`chuangmi.camera.069a01` (Xiaomi Smart Camera 3 PTZ Version) is listed in the go2rtc known Xiaomi camera list, using `cs2+tcp`, HEVC video and Opus audio. On this Mac mini with go2rtc v1.9.14, its RTSP restream was probed successfully and reported HEVC 2960x1666 video plus Opus audio.
 
-Add the account from **Web UI → Add → Xiaomi**. Select the account region and complete any Xiaomi verification challenge in the browser. Select the `069a01` camera and inspect the generated stream. Xiaomi's encryption key retrieval requires internet access on each camera connection; media is transported locally after the connection is established. Keep the go2rtc config and account token private.
+`xiaovv.camera.fjcam2` (Xiaovv Smart Dual Camera S1 PTZ) is not listed as a verified model in the go2rtc known-camera list. It is configured as a second source, but its RTSP restream returned `404 Not Found` during verification; do not treat it as operational until its producer starts and video is observed. A public go2rtc issue reports CS2 timeouts on some Apple Silicon systems with v1.9.14. The `069a01` stream worked in this installation, but this issue may be relevant when troubleshooting other CS2 cameras.
+
+The local stream names are `xiaomi_camera3_ptz` and `xiaovv_s1`. Add the account from **Web UI → Add → Xiaomi** if authentication has not yet been saved. Select the account region and complete any Xiaomi verification challenge in the browser. Xiaomi's encryption key retrieval requires internet access on each camera connection; media is transported locally after the connection is established. Keep the go2rtc config and account token private.
 
 ## Run and verify
 
@@ -43,7 +45,13 @@ curl -o /dev/null -w '%{http_code}\n' http://192.168.3.18:1984/
 
 Expected: authorized UI request returns `200`, unauthenticated request returns `401`, and listeners bind only to `192.168.3.18`.
 
-After adding the Xiaomi account, check **Streams** in the UI and confirm the camera has video packets and a live preview. The stream API is available at `/api/streams` (requires UI authentication). Do not declare camera integration complete until the preview and stream statistics are verified.
+After adding the Xiaomi account, check **Streams** in the UI and confirm each camera has video packets and a live preview. The stream API is available at `/api/streams` (requires UI authentication). The known working stream can also be probed with:
+
+```bash
+ffprobe -v error -rtsp_transport tcp -show_entries stream=codec_name,codec_type,width,height -of json rtsp://192.168.3.18:8554/xiaomi_camera3_ptz
+```
+
+Do not declare a camera integration complete until the preview and stream statistics are verified. In this deployment, `xiaovv_s1` currently returns RTSP 404 and is not yet verified.
 
 ## Recovery and credential hygiene
 
