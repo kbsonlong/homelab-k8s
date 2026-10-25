@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: seekdb
+  namespace: aivision
+spec:
+  selector:
+    app.kubernetes.io/name: seekdb
+  ports:
+    - name: mysql
+      port: 2881
+      targetPort: 2881
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: signoz-ob
+  namespace: aivision
+spec:
+  selector:
+    app.kubernetes.io/name: signoz-ob
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: antcollector-gw
+  namespace: aivision
+spec:
+  selector:
+    app.kubernetes.io/name: antcollector-gw
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+    - name: health
+      port: 13133
+      targetPort: 13133
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aivision-be
+  namespace: aivision
+spec:
+  selector:
+    app.kubernetes.io/name: aivision-be
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentlens
+  namespace: aivision
+spec:
+  selector:
+    app.kubernetes.io/name: agentlens
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aivision-fe
+  namespace: aivision
+spec:
+  selector:
+    app.kubernetes.io/name: aivision-fe
+  ports:
+    - name: http
+      port: 5174
+      targetPort: 5174

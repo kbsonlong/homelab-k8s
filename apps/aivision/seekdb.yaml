@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: seekdb
+  namespace: aivision
+  labels:
+    app.kubernetes.io/name: seekdb
+    app.kubernetes.io/part-of: ai-vision
+spec:
+  serviceName: seekdb
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: seekdb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: seekdb
+        app.kubernetes.io/part-of: ai-vision
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: colima
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: seekdb
+          image: local/seekdb:arm64
+          imagePullPolicy: IfNotPresent
+          args:
+            - --nodaemon
+            - --base-dir=/var/lib/seekdb
+            - --port=2881
+            - --parameter
+            - memory_limit=2G
+            - --parameter
+            - cpu_count=2
+            - --parameter
+            - datafile_size=2G
+            - --parameter
+            - log_disk_size=2G
+          env:
+            - name: OB_TENANT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aivision-runtime
+                  key: OB_TENANT_PASSWORD
+          ports:
+            - name: mysql
+              containerPort: 2881
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 3Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/seekdb
+          startupProbe:
+            tcpSocket:
+              port: mysql
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: mysql
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: mysql
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: seekdb-data

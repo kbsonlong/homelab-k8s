@@ -1,0 +1,56 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: aivision-ui
+  namespace: aivision
+  labels: {app.kubernetes.io/part-of: ai-vision}
+spec:
+  parentRefs:
+    - name: lab-gateway
+      namespace: cilium-gateway
+      sectionName: http
+  hostnames: [aivision.kbsonlong.com]
+  rules:
+    - matches:
+        - path: {type: PathPrefix, value: /}
+      backendRefs:
+        - name: aivision-fe
+          port: 5174
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: aivision-otel-http
+  namespace: aivision
+  labels: {app.kubernetes.io/part-of: ai-vision}
+spec:
+  parentRefs:
+    - name: lab-gateway
+      namespace: cilium-gateway
+      sectionName: http
+  hostnames: [otel-aivision.kbsonlong.com]
+  rules:
+    - matches:
+        - path: {type: PathPrefix, value: /}
+      backendRefs:
+        - name: antcollector-gw
+          port: 4318
+---
+# gRPC uses the existing HTTP listener with an h2c backend. Keep the route
+# separate so OTLP/gRPC can be tested and rolled back independently.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: aivision-otel-grpc
+  namespace: aivision
+  labels: {app.kubernetes.io/part-of: ai-vision}
+spec:
+  parentRefs:
+    - name: lab-gateway
+      namespace: cilium-gateway
+      sectionName: http
+  hostnames: [otel-aivision.kbsonlong.com]
+  rules:
+    - backendRefs:
+        - name: antcollector-gw
+          port: 4317

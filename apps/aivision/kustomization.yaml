@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aivision
+
+resources:
+  - namespace.yaml
+  - storage.yaml
+  - services.yaml
+  - seekdb.yaml
+  - signoz.yaml
+  - antcollector.yaml
+  - backend.yaml
+  - agentlens.yaml
+  - frontend.yaml
+  - gateway-routes.yaml
+
+images:
+  - name: local/aivision-be
+    newName: 192.168.3.83:5050/aivision-be
+    newTag: dev
+  - name: local/aivision-fe
+    newName: 192.168.3.83:5050/aivision-fe
+    newTag: dev
+  - name: local/agentlens
+    newName: 192.168.3.83:5050/agentlens
+    newTag: dev
+  - name: local/antcollector-gw
+    newName: 192.168.3.83:5050/antcollector-gw
+    newTag: dev
+  - name: local/signoz-ob
+    newName: 192.168.3.83:5050/signoz-ob
+    newTag: dev
+  - name: local/seekdb
+    newName: 192.168.3.83:5050/seekdb
+    newTag: arm64
