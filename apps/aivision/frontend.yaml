@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aivision-fe
+  namespace: aivision
+  labels: {app.kubernetes.io/name: aivision-fe, app.kubernetes.io/part-of: ai-vision}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app.kubernetes.io/name: aivision-fe}}
+  template:
+    metadata: {labels: {app.kubernetes.io/name: aivision-fe, app.kubernetes.io/part-of: ai-vision}}
+    spec:
+      nodeSelector: {kubernetes.io/hostname: colima}
+      containers:
+        - name: aivision-fe
+          image: local/aivision-fe:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: FE_PORT, value: "5174"}
+            - {name: BE_UPSTREAM, value: http://aivision-be:8001}
+            - {name: AIVISION_TRUST_PROXY_HEADERS, value: "true"}
+          ports: [{name: http, containerPort: 5174}]
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 10
+            failureThreshold: 6

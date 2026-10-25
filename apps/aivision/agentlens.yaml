@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentlens
+  namespace: aivision
+  labels: {app.kubernetes.io/name: agentlens, app.kubernetes.io/part-of: ai-vision}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app.kubernetes.io/name: agentlens}}
+  template:
+    metadata: {labels: {app.kubernetes.io/name: agentlens, app.kubernetes.io/part-of: ai-vision}}
+    spec:
+      nodeSelector: {kubernetes.io/hostname: colima}
+      containers:
+        - name: agentlens
+          image: local/agentlens:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: ALIPAY_APP_ENV, value: dev}
+            - {name: AGENTLENS_PORT, value: "8081"}
+            - {name: AGENTLENS_LOG_DIR, value: /var/log/agentlens}
+            - {name: AGENTLENS_LOG_STDOUT, value: "true"}
+            - name: SIGNOZ_ORG_ID
+              valueFrom: {secretKeyRef: {name: aivision-runtime, key: SIGNOZ_ORG_ID}}
+            - {name: ANTCOLLECTOR_ENDPOINT, value: http://antcollector-gw:4318/v1/traces}
+            - {name: AIVISION_INGEST_TOKEN_URL, value: http://aivision-be:8001/api/internal/agentlens/ingest-tokens}
+            - name: AGENTLENS_TOKEN
+              valueFrom: {secretKeyRef: {name: aivision-runtime, key: AGENTLENS_TOKEN}}
+            - name: AGENTLENS_OB_URL
+              valueFrom: {secretKeyRef: {name: aivision-runtime, key: AGENTLENS_OB_URL}}
+            - name: SIGNOZ_OB_URL
+              valueFrom: {secretKeyRef: {name: aivision-runtime, key: SIGNOZ_OB_URL}}
+          ports: [{name: http, containerPort: 8081}]
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          readinessProbe:
+            httpGet: {path: /internal/healthz, port: http}
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: /internal/healthz, port: http}
+            periodSeconds: 10
+            failureThreshold: 6

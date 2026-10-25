@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aivision-be
+  namespace: aivision
+  labels: {app.kubernetes.io/name: aivision-be, app.kubernetes.io/part-of: ai-vision}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app.kubernetes.io/name: aivision-be}}
+  template:
+    metadata: {labels: {app.kubernetes.io/name: aivision-be, app.kubernetes.io/part-of: ai-vision}}
+    spec:
+      nodeSelector: {kubernetes.io/hostname: colima}
+      containers:
+        - name: aivision-be
+          image: local/aivision-be:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: AIVISION_ENV, value: container}
+            - {name: DB_ENGINE, value: aivision_backend.db_backends.mysql_connector_oceanbase}
+            - {name: DB_HOST, value: seekdb}
+            - {name: DB_PORT, value: "2881"}
+            - {name: DB_USER, value: root}
+            - {name: DB_NAME, value: aivision}
+            - {name: BE_PORT, value: "8001"}
+            - {name: ALLOWED_HOSTS, value: "localhost,127.0.0.1,vision.kbsonlong.com,aivision-be"}
+            - {name: CSRF_TRUSTED_ORIGINS, value: "http://vision.kbsonlong.com,http://localhost:5174"}
+            - {name: CORS_ALLOWED_ORIGINS, value: "http://vision.kbsonlong.com,http://localhost:5174"}
+            - {name: SITE_URL, value: http://vision.kbsonlong.com}
+            - {name: AIVISION_PUBLIC_BASE_URL, value: http://vision.kbsonlong.com}
+            - {name: AIVISION_OTLP_INGEST_ENDPOINT, value: http://otel-vision.kbsonlong.com}
+            - {name: AIVISION_OTLP_UPSTREAM_ENDPOINT, value: http://antcollector-gw:4318}
+            - {name: AIVISION_NATIVE_TRACE_HISTORY_START, value: "2026-10-17T00:00:00Z"}
+            - {name: AIVISION_NATIVE_TRACE_FUTURE_SKEW_SECONDS, value: "300"}
+            - {name: AIVISION_NATIVE_TRACE_MAX_WINDOWS, value: "120"}
+            - {name: SIGNOZ_INTERNAL_URL, value: http://signoz-ob:8080}
+            - {name: SIGNOZ_ROOT_EMAIL, value: main-local-test@example.com}
+            - {name: SIGNOZ_ROOT_ORG_NAME, value: "OceanBase main local verification"}
+            - {name: AGENTLENS_BASE_URL, value: http://agentlens:8081}
+            - {name: AIVISION_LOG_DIR, value: /var/log/aivision}
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: aivision-runtime, key: OB_TENANT_PASSWORD}}
+            - name: SECRET_KEY
+              valueFrom: {secretKeyRef: {name: aivision-runtime, key: SECRET_KEY}}
+            - name: AIVISION_INGEST_SECRET
+              valueFrom: {secretKeyRef: {name: aivision-runtime, key: AIVISION_INGEST_SECRET}}
+            - name: AGENTLENS_TOKEN
+              valueFrom: {secretKeyRef: {name: aivision-runtime, key: AGENTLENS_TOKEN}}
+            - name: SIGNOZ_USER_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: aivision-runtime, key: SIGNOZ_USER_ROOT_PASSWORD}}
+          ports: [{name: http, containerPort: 8001}]
+          resources:
+            requests: {cpu: 250m, memory: 768Mi}
+            limits: {cpu: "2", memory: 2Gi}
+          readinessProbe:
+            httpGet: {path: /api/v1/health, port: http}
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: {path: /api/v1/health, port: http}
+            periodSeconds: 10
+            failureThreshold: 12

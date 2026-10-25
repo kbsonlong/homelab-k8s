@@ -1,0 +1,74 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: aivision-hostpath
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: aivision-seekdb-pv
+spec:
+  capacity:
+    storage: 8Gi
+  accessModes: [ReadWriteOnce]
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: aivision-hostpath
+  local:
+    path: /var/lib/docker/volumes/aivforge-seekdb-data-aivision/_data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [colima]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: seekdb-data
+  namespace: aivision
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: aivision-hostpath
+  volumeName: aivision-seekdb-pv
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: aivision-signoz-metastore-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadWriteOnce]
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: aivision-hostpath
+  local:
+    path: /Users/kbsonlong/.hermes/aivision-forge/aivision/state/signoz-metastore
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [colima]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: signoz-metastore
+  namespace: aivision
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: aivision-hostpath
+  volumeName: aivision-signoz-metastore-pv
+  resources:
+    requests:
+      storage: 1Gi
