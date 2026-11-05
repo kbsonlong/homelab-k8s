@@ -20,13 +20,18 @@
 - **RECOVER**：走 .1 期间连续 10 次（约 2.5min）探测成功 → `route change default 192.168.3.16`。
 - 切换用 `route change` 而非 GateShift 的 `proxy/default` 命令：后者在 macOS 走 `networksetup -setmanual`，会把 Wi-Fi 从 DHCP 改成手动配置。
 
-## 为什么不需要改 Mac 的 DNS
+## 为什么任意设备只改网关即可分流（无需改 DNS）
 
-- Mac Wi-Fi 无手动 DNS（`networksetup -getdnsservers` 为空），解析器是 DHCP 下发的路由器 `.1`。
+- **任意 LAN 设备**把 IPv4 网关改为 `.16` 即获得同款分流；DNS 保持 DHCP 下发的路由器 `.1` 不用动（Mac Wi-Fi 无手动 DNS，解析器 = `.1`，DNS 查询走 LAN 直达路由器，不经过 VM100）。
 - 分流不依赖客户端 DNS 结果：TCP 80/443 在 VM100 PREROUTING 被 REDIRECT 到 v2ray transparent inbound（dokodemo-door + followRedirect），v2ray 靠 **TLS SNI / HTTP Host 嗅探**还原域名，按 geosite 域名规则选 proxy/direct。
 - 被墙域名即使被 DNS 污染返回假 IP：连接仍被透明拦截 → 嗅探出真域名 → 走 proxy 出口，由美国 VPS 远端解析真实 IP，污染结果被丢弃。
 - 国内域名直连场景：域名无污染，DNS 正常，连接 RETURN 直出。
-- UDP/QUIC(443) 不在拦截范围（v6 已关），应用 QUIC 失败后自动回退 TCP，无泄漏。
+- 未命中任何路由规则的流量走默认 outbound（`proxy`，outbounds 首位）→ 海外未知站点自动走美国；geosite:cn 之外的国内新站会被误代理，需手动加直连规则。
+
+## 两个前提/边界（"任意设备"的例外）
+
+1. **IPv6 旁路**：透明链是纯 IPv4。设备若拿到路由器下发的 IPv6 RA 且站点支持 v6（Google 系全部支持），国外流量会绕过 v4 透明代理直连——Mac 已 `setv6off` 就是为堵这个。其他设备要么关 v6，要么在路由器侧停发 v6 RA。
+2. **UDP/QUIC(443) 不在拦截范围**：应用 QUIC 失败后自动回退 TCP，无泄漏；非 80/443 端口的应用需显式代理（`.16:1087` / `.16:1080`）。
 
 ## 验证
 
