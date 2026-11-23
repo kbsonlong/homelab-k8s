@@ -1,0 +1,45 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argoproj.io
+spec:
+  project: default
+  sources:
+    # values 引用: gitea 私仓 (凭据走 argocd repo secret gitea-repo-creds)
+    - repoURL: https://gitea.kbsonlong.com/kbsonlong/homelab-k8s.git
+      targetRevision: main
+      ref: values
+    # VM operator CRDs (VMSingle/VMAgent/VLSingle/VLAgent/VTSingle 等, 栈 chart 不自带)
+    - repoURL: https://victoriametrics.github.io/helm-charts
+      chart: victoria-metrics-operator-crds
+      targetRevision: 0.15.2
+    # 主栈: operator + vmsingle/vmagent/vlsingle/vlagent/vtsingle + grafana + sync-job
+    - repoURL: https://victoriametrics.github.io/helm-charts
+      chart: victoria-metrics-k8s-stack
+      targetRevision: 0.98.1
+      helm:
+        valueFiles:
+          - $values/helm/victoriametrics/values.yaml
+    # 独立 manifest: vtsingle OTLP gRPC svc + grafana HTTPRoute (共享 lab-gateway)
+    - repoURL: https://gitea.kbsonlong.com/kbsonlong/homelab-k8s.git
+      targetRevision: main
+      path: apps/observability
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 3m
