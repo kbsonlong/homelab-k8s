@@ -43,15 +43,40 @@ spec:
         factor: 2
         maxDuration: 3m
   ignoreDifferences:
-    # API server 注入默认值 (weight/group) 导致与 git 的无意义漂移
+    # HTTPRoute: API server 注入默认值 (group/kind/weight) 造成无意义漂移
     - group: gateway.networking.k8s.io
       kind: HTTPRoute
       jqPathExpressions:
         - .spec.parentRefs[].group
+        - .spec.parentRefs[].kind
         - .spec.rules[].backendRefs[].group
         - .spec.rules[].backendRefs[].weight
-    # Job 状态比较噪音 (sync-job 单次运行, Completed 后仍报 OutOfSync)
+    # Job: controller 注入 selector (controller-uid) + template labels → 永久漂移
     - group: batch
       kind: Job
       jqPathExpressions:
+        - .spec.selector
         - .spec.template
+    # grafana secret: admin-password 由 chart randAlphaNum 每次 render 重生成;
+    # Deployment 的 checksum/secret 注解随之联动 → 一并忽略 (live 值为首次安装固化值)
+    - group: ""
+      kind: Secret
+      name: vmk8s-grafana
+      jqPathExpressions:
+        - .data['admin-password']
+    - group: apps
+      kind: Deployment
+      name: vmk8s-grafana
+      jqPathExpressions:
+        - .spec.template.metadata.annotations
+    # operator webhook cert: 每次 render 重生成 (builtin cert generator 非确定性)
+    - group: ""
+      kind: Secret
+      name: vmk8s-victoria-metrics-operator-validation
+      jqPathExpressions:
+        - .data
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: vmk8s-victoria-metrics-operator-admission
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
