@@ -42,3 +42,16 @@ spec:
         duration: 15s
         factor: 2
         maxDuration: 3m
+  ignoreDifferences:
+    # API server 注入默认值 (weight/group) 导致与 git 的无意义漂移
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      jqPathExpressions:
+        - .spec.parentRefs[].group
+        - .spec.rules[].backendRefs[].group
+        - .spec.rules[].backendRefs[].weight
+    # Job 状态比较噪音 (sync-job 单次运行, Completed 后仍报 OutOfSync)
+    - group: batch
+      kind: Job
+      jqPathExpressions:
+        - .spec.template
