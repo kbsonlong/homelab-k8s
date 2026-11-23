@@ -50,6 +50,7 @@ spec:
         - .spec.parentRefs[].group
         - .spec.parentRefs[].kind
         - .spec.rules[].backendRefs[].group
+        - .spec.rules[].backendRefs[].kind
         - .spec.rules[].backendRefs[].weight
     # Job: controller 注入 selector (controller-uid) + template labels → 永久漂移
     - group: batch
