@@ -1,4 +1,8 @@
 replicaCount: 1
+# /data (single shared PVC, leveldb lock) is not safe for two pods during rolling
+# updates -> old pod holds the lock and the new pod CrashLoops (seen 2026-11-23).
+strategy:
+  type: "Recreate"
 
 image:
   registry: docker.gitea.com
