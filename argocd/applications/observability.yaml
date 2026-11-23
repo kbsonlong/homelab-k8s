@@ -12,15 +12,14 @@ spec:
     - repoURL: https://gitea.kbsonlong.com/kbsonlong/homelab-k8s.git
       targetRevision: main
       ref: values
-    # VM operator CRDs (VMSingle/VMAgent/VLSingle/VLAgent/VTSingle 等, 栈 chart 不自带)
-    - repoURL: https://victoriametrics.github.io/helm-charts
-      chart: victoria-metrics-operator-crds
-      targetRevision: 0.15.2
-    # 主栈: operator + vmsingle/vmagent/vlsingle/vlagent/vtsingle + grafana + sync-job
+    # 主栈: operator(自带 CRDs) + vmsingle/vmagent/vlsingle/vlagent/vtsingle + grafana + sync-job
     - repoURL: https://victoriametrics.github.io/helm-charts
       chart: victoria-metrics-k8s-stack
       targetRevision: 0.98.1
       helm:
+        # 固定 release 名 vmk8s: ①组件 svc 名 <63 字符合规 ②与 apps/observability
+        # 中 vtsingle-otlp-grpc-svc / grafana-httproute 的 instance 选择器一致
+        releaseName: vmk8s
         valueFiles:
           - $values/helm/victoriametrics/values.yaml
     # 独立 manifest: vtsingle OTLP gRPC svc + grafana HTTPRoute (共享 lab-gateway)
