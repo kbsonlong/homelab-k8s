@@ -72,9 +72,14 @@ gitea:
       DB_TYPE: postgres
     server:
       DOMAIN: gitea.${BASE_DOMAIN}
-      ROOT_URL: http://gitea.${BASE_DOMAIN}/
+      # public chain terminates TLS at CF edge; tunnel->Envoy->gitea is plain HTTP,
+      # so propagate https via X-Forwarded-Proto (set by gitea HTTPRoute filter)
+      ROOT_URL: https://gitea.${BASE_DOMAIN}/
       SSH_PORT: 22
       SSH_LISTEN_PORT: 2222
+    security:
+      # trust gateway/LAN proxies so X-Forwarded-Proto/For are honored
+      REVERSE_PROXY_TRUSTED_PROXIES: 127.0.0.0/8, ::1/128, 192.168.3.0/24, 10.42.0.0/16
     service:
       DISABLE_REGISTRATION: true
     other:
