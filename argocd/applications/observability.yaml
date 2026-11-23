@@ -63,7 +63,7 @@ spec:
       kind: Secret
       name: vmk8s-grafana
       jqPathExpressions:
-        - .data['admin-password']
+        - .data["admin-password"]
     - group: apps
       kind: Deployment
       name: vmk8s-grafana
