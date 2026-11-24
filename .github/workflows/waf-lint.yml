@@ -1,0 +1,37 @@
+name: waf-lint
+on:
+  pull_request:
+    paths: ["config/waf/**", "config/gateway/**", "argocd/applications/waf*.yaml"]
+  push:
+    branches: [main]
+    paths: ["config/waf/**"]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: yamllint
+        run: pip install yamllint && yamllint -c .yamllint.yml config/waf config/gateway argocd/applications
+      - name: kustomize build
+        run: kubectl kustomize config/waf > /tmp/waf.yaml
+      - name: rule id check
+        run: |
+          ids=$(grep -rhoE 'id:[0-9]+' config/waf/sites config/waf/custom)
+          dups=$(echo "$ids" | sort | uniq -d); [ -z "$dups" ] || { echo "duplicate ids: $dups"; exit 1; }
+      - name: nginx -t with CRS
+        run: |
+          mkdir -p /tmp/waf
+          cp config/waf/sites/*/before-crs.conf /tmp/waf/ 2>/dev/null || true
+          for d in config/waf/sites/*/; do n=$(basename "$d"); cp "$d/before-crs.conf" "/tmp/waf/$n-before-crs.conf"; done
+          rm -f /tmp/waf/before-crs.conf
+          cp config/waf/custom/rules.conf /tmp/waf/custom-rules.conf
+          docker run --rm \
+            -e MODSEC_RULE_ENGINE=DetectionOnly -e BLOCKING_PARANOIA=1 \
+            -v "$PWD/config/waf/detector/nginx/default.conf.template:/etc/nginx/templates/conf.d/default.conf.template:ro" \
+            -v "$PWD/config/waf/detector/nginx/trusted-proxies.conf:/etc/nginx/trusted-proxies.conf:ro" \
+            -v "$PWD/config/waf/detector/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:/etc/modsecurity.d/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:ro" \
+            -v "$PWD/config/waf/detector/RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf:/etc/modsecurity.d/owasp-crs/rules/RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf:ro" \
+            -v "/tmp/waf:/etc/modsecurity.d/waf:ro" \
+            owasp/modsecurity-crs:nginx \
+            sh -c '/docker-entrypoint.sh nginx -t'

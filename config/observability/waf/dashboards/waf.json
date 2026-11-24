@@ -1,0 +1,811 @@
+{
+  "uid": "waf-overview",
+  "title": "WAF 旁路检测",
+  "tags": [
+    "waf",
+    "crs",
+    "security"
+  ],
+  "timezone": "Asia/Shanghai",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "ds_logs",
+        "label": "Logs",
+        "type": "datasource",
+        "query": "victoriametrics-logs-datasource",
+        "current": {}
+      },
+      {
+        "name": "ds_metrics",
+        "label": "Metrics",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      },
+      {
+        "name": "site",
+        "label": "站点 Host",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      },
+      {
+        "name": "ip",
+        "label": "来源 IP",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      },
+      {
+        "name": "site_filter",
+        "type": "constant",
+        "hide": 2,
+        "query": "transaction.request.headers.Host:~\"${site:regex}\""
+      },
+      {
+        "name": "ip_filter",
+        "type": "constant",
+        "hide": 2,
+        "query": "transaction.client_ip:~\"${ip:regex}\""
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "概览",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 1,
+      "title": "命中次数",
+      "type": "stat",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "${ds_logs}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${ds_logs}"
+          },
+          "expr": "{kubernetes.namespace=\"waf\", kubernetes.container_name=\"crs-detector\"} transaction.messages:* $site_filter $ip_filter | stats count() hits",
+          "queryType": "stats"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 2,
+      "title": "来源 IP 数",
+      "type": "stat",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "${ds_logs}"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${ds_logs}"
+          },
+          "expr": "{kubernetes.namespace=\"waf\", kubernetes.container_name=\"crs-detector\"} transaction.messages:* $site_filter $ip_filter | stats count_uniq(transaction.client_ip) ips",
+          "queryType": "stats"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 3,
+      "title": "严重级别命中",
+      "type": "stat",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "${ds_logs}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${ds_logs}"
+          },
+          "expr": "{kubernetes.namespace=\"waf\", kubernetes.container_name=\"crs-detector\"} transaction.messages:* $site_filter $ip_filter | unroll (transaction.messages) | unpack_json from transaction.messages fields (details) | unpack_json from details fields (ruleId, severity, data) | filter ruleId:!\"949110\" ruleId:!\"980170\" ruleId:!\"980130\" | filter severity:=\"2\" | stats count() hits",
+          "queryType": "stats"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "检测器可用",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds_metrics}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds_metrics}"
+          },
+          "expr": "kube_deployment_status_replicas_available{namespace=\"waf\",deployment=\"crs-detector\"}",
+          "legendFormat": ""
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "检测器重启 (24h)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds_metrics}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds_metrics}"
+          },
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"waf\",container=\"crs-detector\"}[24h]))",
+          "legendFormat": ""
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 6,
+      "title": "已触发封禁告警",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds_metrics}"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds_metrics}"
+          },
+          "expr": "count(ALERTS{alertstate=\"firing\",waf_action=\"block\"}) or vector(0)",
+          "legendFormat": ""
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "description": "vmalert 写回的 ALERTS 指标；实际封禁名单以 waf-console 封禁中心为准"
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "趋势",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 7,
+      "title": "命中趋势（按站点）",
+      "type": "timeseries",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "${ds_logs}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${ds_logs}"
+          },
+          "expr": "{kubernetes.namespace=\"waf\", kubernetes.container_name=\"crs-detector\"} transaction.messages:* $site_filter $ip_filter | stats by (transaction.request.headers.Host) count() hits",
+          "queryType": "statsRange",
+          "legendFormat": "{{transaction.request.headers.Host}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 80
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "命中趋势（按攻击类别）",
+      "type": "timeseries",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "${ds_logs}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${ds_logs}"
+          },
+          "expr": "{kubernetes.namespace=\"waf\", kubernetes.container_name=\"crs-detector\"} transaction.messages:* $site_filter $ip_filter | unroll (transaction.messages) | unpack_json from transaction.messages fields (details) | unpack_json from details fields (ruleId, severity, data) | filter ruleId:!\"949110\" ruleId:!\"980170\" ruleId:!\"980130\" | math floor(ruleId/1000) as family | stats by (family) count() hits",
+          "queryType": "statsRange",
+          "legendFormat": "{{family}}xxx"
+        }
+      ],
+      "description": "规则族：913 扫描器 / 920 协议 / 930 LFI / 932 RCE / 933 PHP / 941 XSS / 942 SQLi / 1100 自定义",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 80
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Gateway P99 延迟 vs 检测器 CPU",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds_metrics}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds_metrics}"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(envoy_http_downstream_rq_time_bucket{namespace=\"kube-system\"}[5m])))",
+          "legendFormat": "Gateway P99 (ms)"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds_metrics}"
+          },
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"waf\",container=\"crs-detector\"}[5m]))*1000",
+          "legendFormat": "detector CPU (m)"
+        }
+      ],
+      "description": "对比镜像开关前后，确认旁路检测没有影响主链路",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detector CPU (m)"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "title": "检测器内存 / 节流",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds_metrics}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds_metrics}"
+          },
+          "expr": "sum(container_memory_working_set_bytes{namespace=\"waf\",container=\"crs-detector\"})",
+          "legendFormat": "working set"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds_metrics}"
+          },
+          "expr": "sum(rate(container_cpu_cfs_throttled_periods_total{namespace=\"waf\",container=\"crs-detector\"}[5m])) / sum(rate(container_cpu_cfs_periods_total{namespace=\"waf\",container=\"crs-detector\"}[5m]))",
+          "legendFormat": "throttle ratio"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "working set"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "throttle ratio"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Top N（调优与封禁）",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 11,
+      "title": "Top 命中规则（误报候选：命中多 + IP 分散）",
+      "type": "table",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "${ds_logs}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${ds_logs}"
+          },
+          "expr": "{kubernetes.namespace=\"waf\", kubernetes.container_name=\"crs-detector\"} transaction.messages:* $site_filter $ip_filter | unroll (transaction.messages) | unpack_json from transaction.messages fields (details) | unpack_json from details fields (ruleId, severity, data) | filter ruleId:!\"949110\" ruleId:!\"980170\" ruleId:!\"980130\" | stats by (ruleId) count() hits, count_uniq(transaction.client_ip) ips, count_uniq(transaction.request.uri) uris | sort by (hits desc) | limit 20",
+          "queryType": "stats"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "hits",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ips"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "transparent",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 5
+                    },
+                    {
+                      "color": "red",
+                      "value": 20
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "title": "Top 来源 IP",
+      "type": "table",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "${ds_logs}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${ds_logs}"
+          },
+          "expr": "{kubernetes.namespace=\"waf\", kubernetes.container_name=\"crs-detector\"} transaction.messages:* $site_filter $ip_filter | stats by (transaction.client_ip) count() hits, count_uniq(transaction.request.uri) uris, max(_time) last_seen | sort by (hits desc) | limit 20",
+          "queryType": "stats"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "hits",
+            "desc": true
+          }
+        ]
+      },
+      "links": [
+        {
+          "title": "在 waf-console 中查看",
+          "url": "https://waf.kbsonlong.com/#events?ip=${__data.fields[\"transaction.client_ip\"]}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Top 被攻击 URI",
+      "type": "table",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "${ds_logs}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${ds_logs}"
+          },
+          "expr": "{kubernetes.namespace=\"waf\", kubernetes.container_name=\"crs-detector\"} transaction.messages:* $site_filter $ip_filter | stats by (transaction.request.headers.Host, transaction.request.uri) count() hits | sort by (hits desc) | limit 20",
+          "queryType": "stats"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "hits",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "title": "规则 × URI（例外规则候选）",
+      "type": "table",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "${ds_logs}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 31,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${ds_logs}"
+          },
+          "expr": "{kubernetes.namespace=\"waf\", kubernetes.container_name=\"crs-detector\"} transaction.messages:* $site_filter $ip_filter | unroll (transaction.messages) | unpack_json from transaction.messages fields (details) | unpack_json from details fields (ruleId, severity, data) | filter ruleId:!\"949110\" ruleId:!\"980170\" ruleId:!\"980130\" | stats by (ruleId, transaction.request.uri, data) count() hits, count_uniq(transaction.client_ip) ips | filter ips:>=3 | sort by (hits desc) | limit 30",
+          "queryType": "stats"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "hits",
+            "desc": true
+          }
+        ]
+      },
+      "description": "同一条规则在同一个 URI、同一个参数上被多个不同 IP 命中，很可能是误报，可以去 waf-console 学习报告里生成例外规则"
+    },
+    {
+      "id": 103,
+      "type": "row",
+      "title": "事件明细",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 15,
+      "title": "最近事件",
+      "type": "logs",
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "${ds_logs}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 24,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "${ds_logs}"
+          },
+          "expr": "{kubernetes.namespace=\"waf\", kubernetes.container_name=\"crs-detector\"} transaction.messages:* $site_filter $ip_filter | sort by (_time desc) | limit 200 | fields _time, transaction.client_ip, transaction.request.method, transaction.request.headers.Host, transaction.request.uri, transaction.messages",
+          "queryType": "instant"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      }
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "name": "WAF 配置变更",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${ds_metrics}"
+        },
+        "enable": true,
+        "iconColor": "blue",
+        "expr": "changes(argocd_app_info{name=\"waf\"}[2m]) > 0",
+        "titleFormat": "waf 配置同步"
+      }
+    ]
+  },
+  "description": "crs-detector（RequestMirror 旁路）检测事件 + 检测器健康。字段名以 VictoriaLogs 实际解析结果为准。"
+}

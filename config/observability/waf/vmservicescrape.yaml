@@ -1,0 +1,26 @@
+# 采集 Argo CD 应用指标（argocd_app_info）。如果 argo-cd chart 已开启 serviceMonitor 并转换成 VMServiceScrape，可以删掉这个文件
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: argocd-application-controller
+spec:
+  namespaceSelector: {matchNames: [argocd]}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-application-controller   # TODO: 核对 metrics Service 的标签（需要 controller.metrics.enabled=true）
+  endpoints:
+    - port: http-metrics
+      interval: 60s
+---
+# 采集 cilium-envoy 指标（Gateway 延迟）。需要在 Cilium 里开启 envoy.prometheus.enabled 和 serviceMonitor
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: cilium-envoy
+spec:
+  namespaceSelector: {matchNames: [kube-system]}
+  selector:
+    matchLabels: {k8s-app: cilium-envoy}
+  podMetricsEndpoints:
+    - port: envoy-metrics
+      interval: 30s

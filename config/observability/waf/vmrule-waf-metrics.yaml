@@ -1,0 +1,71 @@
+# 指标规则：查询 VictoriaMetrics（kube-state-metrics、cAdvisor、Argo CD、cilium-envoy）
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: waf-metrics
+  labels:
+    app.kubernetes.io/part-of: waf
+spec:
+  groups:
+  - name: waf-health
+    type: prometheus
+    interval: 1m
+    rules:
+    - alert: WafDetectorDown
+      expr: kube_deployment_status_replicas_available{namespace="waf",deployment="crs-detector"} < 1
+      for: 3m
+      labels:
+        severity: critical
+      annotations:
+        summary: crs-detector 没有可用副本（旁路检测停止，业务不受影响）
+    - alert: WafDetectorRestarting
+      expr: increase(kube_pod_container_status_restarts_total{namespace="waf",container="crs-detector"}[30m]) > 3
+      for: 0s
+      labels:
+        severity: warning
+      annotations:
+        summary: crs-detector 30 分钟内重启 {{ $value | humanize }} 次
+    - alert: WafDetectorOOM
+      expr: kube_pod_container_status_last_terminated_reason{namespace="waf",container="crs-detector",reason="OOMKilled"} == 1
+      for: 0s
+      labels:
+        severity: warning
+      annotations:
+        summary: crs-detector 被 OOMKilled，考虑调大 limit 或降低 PL / 请求体检查上限
+    - alert: WafDetectorCPUThrottled
+      expr: sum(rate(container_cpu_cfs_throttled_periods_total{namespace="waf",container="crs-detector"}[5m])) / sum(rate(container_cpu_cfs_periods_total{namespace="waf",container="crs-detector"}[5m]))
+        > 0.5
+      for: 10m
+      labels:
+        severity: info
+      annotations:
+        summary: crs-detector CPU 节流超过 50%，镜像流量可能被丢弃（漏检）
+    - alert: WafConsoleDown
+      expr: kube_deployment_status_replicas_available{namespace="waf",deployment="waf-console"} < 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: waf-console 不可用：自动封禁暂停
+    - alert: WafArgoAppUnhealthy
+      expr: argocd_app_info{name=~"waf|waf-console|waf-observability",health_status!~"Healthy|Progressing"} == 1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: Argo CD 应用 {{ $labels.name }} 状态 {{ $labels.health_status }}
+    - alert: WafArgoAppOutOfSync
+      expr: argocd_app_info{name=~"waf|waf-console|waf-observability",sync_status="OutOfSync"} == 1
+      for: 15m
+      labels:
+        severity: info
+      annotations:
+        summary: Argo CD 应用 {{ $labels.name }} OutOfSync 超过 15 分钟
+    - alert: WafGatewayLatencyHigh
+      expr: histogram_quantile(0.99, sum by (le) (rate(envoy_http_downstream_rq_time_bucket{namespace="kube-system"}[5m]))) > 500
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: Gateway P99 延迟 {{ $value | humanize }}ms
+        description: 需要在 Cilium values 里开启 envoy.prometheus.enabled；可以对照开关镜像前后的延迟，判断镜像是否有影响

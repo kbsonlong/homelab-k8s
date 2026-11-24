@@ -1,0 +1,32 @@
+# Argo CD Application "waf" 的入口：crs-detector + Gateway 层封禁策略
+# configMapGenerator 生成的 ConfigMap 名称带 hash，规则一改 Deployment 就会自动滚动更新
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: waf
+
+resources:
+  - detector/priorityclass.yaml
+  - detector/deployment.yaml
+  - detector/service.yaml
+  - detector/networkpolicy.yaml
+  - referencegrant.yaml
+
+labels:
+  - pairs: {app.kubernetes.io/part-of: waf}
+    includeSelectors: false
+
+configMapGenerator:
+  - name: crs-detector-nginx
+    files:
+      - default.conf.template=detector/nginx/default.conf.template
+      - trusted-proxies.conf=detector/nginx/trusted-proxies.conf
+  - name: crs-detector-rules
+    files:
+      # 入口：在 CRS 前后 Include 各站点规则
+      - REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf=detector/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf
+      - RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf=detector/RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf
+      # 站点规则（waf-console 新增站点时需要在这里追加一行，见 TODO）
+      - argocd-before-crs.conf=sites/argocd/before-crs.conf
+      - gitea-before-crs.conf=sites/gitea/before-crs.conf
+      - grafana-before-crs.conf=sites/grafana/before-crs.conf
+      - custom-rules.conf=custom/rules.conf

@@ -1,0 +1,45 @@
+# 告警路由：
+#   waf_action=block → waf-console webhook（执行 Gateway 封禁，封禁成功后由 waf-console 发 ntfy）
+#   其他告警         → ntfy 主题 waf
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlertmanager
+metadata:
+  name: waf
+spec:
+  replicaCount: 1
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {cpu: 100m, memory: 64Mi}
+  configRawYaml: |
+    route:
+      receiver: ntfy
+      group_by: [alertname, client_ip]
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 4h
+      routes:
+        - matchers: ['waf_action="block"']
+          receiver: waf-console
+          group_wait: 0s
+          group_interval: 30s
+          repeat_interval: 30m       # 封禁 TTL 期间重复触发时，waf-console 端是幂等的
+          continue: false
+    receivers:
+      - name: waf-console
+        webhook_configs:
+          - url: http://waf-console.waf.svc:8080/api/v1/alerts
+            send_resolved: false
+            http_config:
+              authorization:
+                type: Bearer
+                credentials_file: /etc/vm/secrets/waf-alert-token/token
+      - name: ntfy
+        webhook_configs:
+          # ntfy 2.x 内置 alertmanager 模板（template=alertmanager）；旧版本请升级或改成自定义模板
+          - url: http://ntfy.ntfy.svc/waf?template=alertmanager   # TODO: 核对 ntfy Service 地址
+            send_resolved: true
+    inhibit_rules:
+      # 检测器宕机期间，不再报“没有事件”之类的派生告警
+      - source_matchers: ['alertname="WafDetectorDown"']
+        target_matchers: ['alertname="WafNoEvents"']
+  secrets: [waf-alert-token]       # 由 scripts/waf-secrets.sh 创建，挂载到 /etc/vm/secrets/waf-alert-token/

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WAF Console</title>
+<script src="https://unpkg.com/alpinejs@3/dist/cdn.min.js" defer></script>
+<style>
+ :root{--bg:#0f1115;--card:#181b22;--fg:#e6e6e6;--mut:#8a8f98;--acc:#4f8cff;--bad:#ff5c5c;--ok:#3ecf8e}
+ body{margin:0;font:14px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+ nav{display:flex;gap:4px;padding:10px 16px;border-bottom:1px solid #252a33}
+ nav button{background:none;border:0;color:var(--mut);padding:6px 12px;border-radius:6px;cursor:pointer}
+ nav button.on{background:var(--card);color:var(--fg)}
+ main{padding:16px;max-width:1200px;margin:auto}
+ .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+ .card{background:var(--card);border-radius:8px;padding:14px}.big{font-size:26px;font-weight:600}
+ table{width:100%;border-collapse:collapse;background:var(--card);border-radius:8px;overflow:hidden}
+ th,td{padding:8px 10px;border-bottom:1px solid #252a33;text-align:left;vertical-align:top}th{color:var(--mut);font-weight:500}
+ input,select{background:#0b0d11;border:1px solid #2a303a;color:var(--fg);padding:6px 8px;border-radius:6px}
+ .btn{background:var(--acc);color:#fff;border:0;padding:6px 12px;border-radius:6px;cursor:pointer}
+ .btn.bad{background:var(--bad)}.tag{padding:1px 6px;border-radius:4px;background:#2a303a;font-size:12px}
+ .high{color:var(--bad)}.ok{color:var(--ok)} pre{white-space:pre-wrap;background:#0b0d11;padding:10px;border-radius:6px}
+ .bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+</style>
+</head>
+<body x-data="app()" x-init="load('overview')">
+<nav>
+ <strong style="padding:6px 12px">🛡 WAF</strong>
+ <template x-for="t in tabs"><button :class="{on:tab===t[0]}" @click="load(t[0])" x-text="t[1]"></button></template>
+</nav>
+<main>
+ <div x-show="err" class="card high" x-text="err"></div>
+
+ <section x-show="tab==='overview'">
+  <div class="cards">
+   <div class="card"><div>24h 命中</div><div class="big" x-text="ov.last24h?.hits ?? '-'"></div></div>
+   <div class="card"><div>24h 来源 IP</div><div class="big" x-text="ov.last24h?.ips ?? '-'"></div></div>
+   <div class="card"><div>当前封禁</div><div class="big" x-text="ov.activeBlocks ?? '-'"></div></div>
+   <div class="card"><div>Argo CD</div><div class="big" :class="ov.argocd?.sync==='Synced'?'ok':'high'" x-text="ov.argocd ? ov.argocd.sync+' / '+ov.argocd.health : '?'"></div></div>
+   <div class="card"><div>自动封禁</div><div class="big" x-text="ov.autoBlock?'开启':'暂停'"></div></div>
+  </div>
+  <h3>站点</h3>
+  <table><tr><th>站点</th><th>Host</th><th>模式</th><th>镜像%</th><th>PL</th><th>阈值</th><th>例外数</th></tr>
+   <template x-for="s in ov.sites||[]"><tr><td x-text="s.name"></td><td x-text="s.host"></td><td><span class="tag" x-text="s.mode"></span></td>
+    <td x-text="s.mirrorPercent"></td><td x-text="s.paranoia"></td><td x-text="s.anomaly.inbound+'/'+s.anomaly.outbound"></td><td x-text="(s.exclusions||[]).length"></td></tr></template>
+  </table>
+ </section>
+
+ <section x-show="tab==='events'">
+  <div class="bar"><input placeholder="Host" x-model="f.host"><input placeholder="IP" x-model="f.ip"><input placeholder="规则 ID" x-model="f.rule" size="8">
+   <select x-model="f.range"><option value="1">1h</option><option value="24">24h</option><option value="168">7d</option></select>
+   <button class="btn" @click="load('events')">查询</button></div>
+  <table><tr><th>时间</th><th>IP</th><th>请求</th><th>评分</th><th>命中规则</th><th></th></tr>
+   <template x-for="e in events"><tr><td x-text="new Date(e.time).toLocaleString()"></td><td x-text="e.clientIp"></td>
+    <td><span x-text="e.method"></span> <span x-text="e.host"></span><span x-text="e.uri"></span></td><td x-text="e.score"></td>
+    <td><template x-for="r in e.rules"><div><span class="tag" x-text="r.id"></span> <span x-text="r.msg"></span></div></template></td>
+    <td><button class="btn" @click="fp(e)">误报</button> <button class="btn bad" @click="block(e.clientIp)">封禁</button></td></tr></template>
+  </table>
+ </section>
+
+ <section x-show="tab==='learning'">
+  <table><tr><th>规则</th><th>URI</th><th>命中</th><th>来源 IP</th><th>误报风险</th></tr>
+   <template x-for="l in learning"><tr><td x-text="l.ruleId"></td><td x-text="l.uri"></td><td x-text="l.hits"></td><td x-text="l.distinctIps"></td>
+    <td :class="l.fpRisk" x-text="l.fpRisk"></td></tr></template></table>
+ </section>
+
+ <section x-show="tab==='blocks'">
+  <div class="bar"><input placeholder="IP" x-model="nb.ip"><input placeholder="TTL 如 1h" x-model="nb.ttl" size="6"><input placeholder="原因" x-model="nb.reason">
+   <button class="btn bad" @click="block(nb.ip, nb.ttl, nb.reason)">封禁</button>
+   <button class="btn" @click="toggleAuto()" x-text="blocks.auto?'暂停自动封禁':'开启自动封禁'"></button></div>
+  <table><tr><th>IP</th><th>来源</th><th>原因</th><th>过期</th><th></th></tr>
+   <template x-for="b in blocks.blocks||[]"><tr><td x-text="b.ip"></td><td x-text="b.source"></td><td x-text="b.reason"></td>
+    <td x-text="new Date(b.expires).toLocaleString()"></td><td><button class="btn" @click="unblock(b.ip)">解封</button></td></tr></template></table>
+ </section>
+
+ <section x-show="tab==='changes'">
+  <div class="bar"><button class="btn" @click="api('POST','/api/v1/sync').then(()=>alert('已触发同步'))">Argo CD 同步</button></div>
+  <table><tr><th>时间</th><th>作者</th><th>说明</th></tr>
+   <template x-for="c in changes"><tr><td x-text="new Date(c.time).toLocaleString()"></td><td x-text="c.author"></td>
+    <td><a :href="c.url" target="_blank" x-text="c.message" style="color:var(--acc)"></a></td></tr></template></table>
+ </section>
+
+ <div x-show="preview" class="card" style="margin-top:16px"><h3>例外规则预览</h3><pre x-text="preview?.preview"></pre>
+  <button class="btn" @click="applyFp()">提交</button> <button class="btn bad" @click="preview=null">取消</button></div>
+</main>
+<script>
+function app(){return{
+ tabs:[['overview','总览'],['events','事件'],['learning','学习报告'],['blocks','封禁中心'],['changes','变更记录']],
+ tab:'overview',err:'',ov:{},events:[],learning:[],blocks:{},changes:[],preview:null,fpReq:null,
+ f:{host:'',ip:'',rule:'',range:'1'},nb:{ip:'',ttl:'1h',reason:''},
+ async api(m,u,b){this.err='';const r=await fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+  if(!r.ok){const j=await r.json().catch(()=>({error:r.statusText}));this.err=j.error;throw j}return r.status===204?null:r.json()},
+ async load(t){this.tab=t;try{
+  if(t==='overview')this.ov=await this.api('GET','/api/v1/overview');
+  if(t==='events'){const p=new URLSearchParams({host:this.f.host,ip:this.f.ip,rule:this.f.rule,from:new Date(Date.now()-this.f.range*3600e3).toISOString()});this.events=await this.api('GET','/api/v1/events?'+p)}
+  if(t==='learning')this.learning=await this.api('GET','/api/v1/learning');
+  if(t==='blocks')this.blocks=await this.api('GET','/api/v1/blocks');
+  if(t==='changes')this.changes=await this.api('GET','/api/v1/changes');
+ }catch(e){}},
+ siteOf(host){return (this.ov.sites||[]).find(s=>host&&host.replace(/-shadow$/,'').startsWith(s.host))?.name},
+ async fp(e){const r=e.rules.find(x=>x.id<949000)||e.rules[0];const target=prompt('目标变量（留空=整条规则移除）',r.data?.match(/(ARGS[^ ]*|REQUEST_COOKIES[^ ]*)/)?.[1]||'');
+  const uri=prompt('URI 前缀',e.uri.split('?')[0]);if(!uri)return;
+  if(!this.ov.sites)this.ov=await this.api('GET','/api/v1/overview');
+  this.fpReq={site:this.siteOf(e.host),ruleId:r.id,uri,target,reason:'误报: '+r.msg};
+  this.preview=await this.api('POST','/api/v1/events/false-positive',{...this.fpReq,apply:false})},
+ async applyFp(){const r=await this.api('POST','/api/v1/events/false-positive',{...this.fpReq,apply:true});this.preview=null;alert('已提交: '+r.ref)},
+ async block(ip,ttl='1h',reason='manual'){if(!ip||!confirm('封禁 '+ip+' ?'))return;await this.api('POST','/api/v1/blocks',{ip,ttl,reason});this.load('blocks')},
+ async unblock(ip){await this.api('DELETE','/api/v1/blocks/'+encodeURIComponent(ip));this.load('blocks')},
+ async toggleAuto(){await this.api('PUT','/api/v1/blocks/auto',{enabled:!this.blocks.auto});this.load('blocks')},
+}}
+</script>
+</body></html>

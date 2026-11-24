@@ -1,0 +1,10 @@
+# Grafana：/api/ds/query 里的 PromQL/LogsQL 容易命中 942/932，先观察再加例外
+name: grafana
+host: grafana.kbsonlong.com
+mode: mirror
+mirrorPercent: 100
+paranoia: 1
+anomaly:
+  inbound: 5
+  outbound: 4
+exclusions: []

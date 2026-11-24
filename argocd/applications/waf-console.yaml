@@ -1,0 +1,17 @@
+# P2 阶段启用：先执行 scripts/waf-secrets.sh 生成 Secret
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: waf-console
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://gitea.kbsonlong.com/kbsonlong/homelab-k8s.git
+    targetRevision: main
+    path: apps/waf-console/deploy
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: waf
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}

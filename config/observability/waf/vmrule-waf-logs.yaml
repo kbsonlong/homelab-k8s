@@ -1,0 +1,100 @@
+# LogsQL 规则：stats 的分组字段（client_ip）会变成告警 label，waf-console 据此执行封禁
+# 局域网和 Tailscale 网段已在查询里排除；waf-console 白名单会再兜一层
+# TODO: 字段名（transaction.client_ip / transaction.messages）以 VictoriaLogs 实际解析结果为准
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: waf-logs
+  labels:
+    app.kubernetes.io/part-of: waf
+spec:
+  groups:
+  - name: waf-block
+    type: vlogs
+    interval: 1m
+    rules:
+    - alert: WafHighAnomaly
+      expr: '{kubernetes.namespace="waf", kubernetes.container_name="crs-detector"} _time:5m transaction.messages:* -transaction.client_ip:ipv4_range("192.168.3.0/24") -transaction.client_ip:ipv4_range("100.64.0.0/10")
+
+        | stats by (transaction.client_ip) count() hits
+
+        | rename transaction.client_ip as client_ip
+
+        | filter hits:>=10'
+      for: 0s
+      labels:
+        waf_action: block
+        waf_ttl: 1h
+        severity: warning
+      annotations:
+        summary: '{{ $labels.client_ip }} 5 分钟内命中 WAF 规则 {{ $value }} 次'
+    - alert: WafCriticalAttack
+      expr: '{kubernetes.namespace="waf", kubernetes.container_name="crs-detector"} _time:5m transaction.messages:* -transaction.client_ip:ipv4_range("192.168.3.0/24") -transaction.client_ip:ipv4_range("100.64.0.0/10")
+
+        | unroll (transaction.messages) | unpack_json from transaction.messages fields (details) | unpack_json from details fields (ruleId, severity, data) | filter ruleId:!"949110" ruleId:!"980170" ruleId:!"980130"
+
+        | filter severity:="2" (ruleId:~"^93[0-4]" or ruleId:~"^94[1-4]" or ruleId:~"^913")
+
+        | stats by (transaction.client_ip) count() hits
+
+        | rename transaction.client_ip as client_ip'
+      for: 0s
+      labels:
+        waf_action: block
+        waf_ttl: 24h
+        severity: critical
+      annotations:
+        summary: '{{ $labels.client_ip }} 触发严重攻击规则（RCE/LFI/SQLi/XSS/扫描器）'
+    - alert: WafSensitiveProbe
+      expr: '{kubernetes.namespace="waf", kubernetes.container_name="crs-detector"} _time:5m transaction.messages:* -transaction.client_ip:ipv4_range("192.168.3.0/24") -transaction.client_ip:ipv4_range("100.64.0.0/10")
+        "1100001"
+
+        | stats by (transaction.client_ip) count() hits
+
+        | rename transaction.client_ip as client_ip
+
+        | filter hits:>=3'
+      for: 0s
+      labels:
+        waf_action: block
+        waf_ttl: 6h
+        severity: warning
+      annotations:
+        summary: '{{ $labels.client_ip }} 探测敏感路径（.env/.git/wp-login 等）'
+  - name: waf-signal
+    type: vlogs
+    interval: 5m
+    rules:
+    - alert: WafAttackSurge
+      expr: '{kubernetes.namespace="waf", kubernetes.container_name="crs-detector"} _time:5m transaction.messages:*
+
+        | stats count() hits
+
+        | filter hits:>=50'
+      for: 0s
+      labels:
+        severity: warning
+      annotations:
+        summary: 5 分钟内 WAF 命中 {{ $value }} 次，可能正在被扫描
+    - alert: WafNoEvents
+      expr: '{kubernetes.namespace="waf", kubernetes.container_name="crs-detector"} _time:24h
+
+        | stats count() lines
+
+        | filter lines:=0'
+      for: 1h
+      labels:
+        severity: info
+      annotations:
+        summary: crs-detector 24 小时内没有任何日志，检查镜像和日志采集是否正常
+    - alert: WafDetectorErrors
+      expr: '{kubernetes.namespace="waf", kubernetes.container_name="crs-detector"} _time:5m ("[emerg]" or "[error]" or "ModSecurity: Rules error")
+
+        | stats count() errors
+
+        | filter errors:>0'
+      for: 0s
+      labels:
+        severity: warning
+      annotations:
+        summary: crs-detector 出现 {{ $value }} 条 nginx/ModSecurity 错误

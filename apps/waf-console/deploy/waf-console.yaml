@@ -1,0 +1,53 @@
+# 由 helm/waf 渲染的等价清单（节选），密钥由 scripts 从 .env 生成。
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: waf-console, namespace: waf}
+spec:
+  replicas: 1   # 封禁元数据在内存中，保持单副本
+  selector: {matchLabels: {app: waf-console}}
+  template:
+    metadata: {labels: {app: waf-console}}
+    spec:
+      serviceAccountName: waf-console
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: waf-console
+          image: gitea.kbsonlong.com/kbsonlong/waf-console:latest
+          ports: [{containerPort: 8080}]
+          envFrom: [{secretRef: {name: waf-console}}]
+          env:
+            - {name: GIT_URL, value: "http://gitea-http.gitea.svc:3000"}
+            - {name: BLOCK_AUTO, value: "false"}
+            - {name: BLOCK_BACKEND, value: gateway}
+            - {name: BLOCK_HOSTNAMES, value: "gitea.kbsonlong.com,argocd.kbsonlong.com,grafana.kbsonlong.com"}
+          volumeMounts: [{name: allowlist, mountPath: /etc/waf-console}]
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}}
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 64Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+        # Gitea OAuth2 登录，向 waf-console 注入 X-Forwarded-User
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+          args:
+            - --provider=oidc
+            - --oidc-issuer-url=https://gitea.kbsonlong.com/
+            - --upstream=http://127.0.0.1:8080
+            - --http-address=0.0.0.0:4180
+            - --email-domain=*
+            - --pass-user-headers=true
+            - --skip-auth-route=POST=^/api/v1/alerts$
+            - --skip-auth-route=GET=^/healthz$
+          envFrom: [{secretRef: {name: waf-console-oauth}}]  # OAUTH2_PROXY_CLIENT_ID/SECRET/COOKIE_SECRET
+          ports: [{containerPort: 4180}]
+          resources: {requests: {cpu: 10m, memory: 24Mi}, limits: {memory: 64Mi}}
+      volumes: [{name: allowlist, configMap: {name: waf-allowlist}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: waf-console, namespace: waf}
+spec:
+  selector: {app: waf-console}
+  ports:
+    - {name: http, port: 80, targetPort: 4180}
+    - {name: webhook, port: 8080, targetPort: 8080}  # 仅供 vmalert 集群内调用

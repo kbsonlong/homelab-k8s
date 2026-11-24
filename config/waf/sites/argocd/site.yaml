@@ -1,0 +1,10 @@
+# Argo CD：UI 请求和 gRPC-Web 请求先在学习模式下观察，再按学习报告补例外
+name: argocd
+host: argocd.kbsonlong.com
+mode: mirror
+mirrorPercent: 100
+paranoia: 1
+anomaly:
+  inbound: 5
+  outbound: 4
+exclusions: []

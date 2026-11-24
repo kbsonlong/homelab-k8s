@@ -1,0 +1,18 @@
+# Argo CD 应用 "waf-observability"：告警组件、WAF 告警规则、Grafana 看板
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+resources:
+  - vmalert-logs.yaml
+  - vmalertmanager.yaml
+  - vmrule-waf-logs.yaml
+  - vmrule-waf-metrics.yaml
+  - vmservicescrape.yaml
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+  - name: grafana-dashboard-waf
+    files: [waf.json=dashboards/waf.json]
+    options:
+      labels: {grafana_dashboard: "1"}          # 由 Grafana sidecar 自动加载（标签名以 chart values 为准）
+      annotations: {grafana_folder: "WAF"}

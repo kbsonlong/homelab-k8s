@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crs-detector
+  labels: {app: crs-detector}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  selector:
+    matchLabels: {app: crs-detector}
+  template:
+    metadata:
+      labels: {app: crs-detector}
+    spec:
+      priorityClassName: waf-low
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: crs-detector
+          # 与现有 crs-* 保持同一 tag
+          image: owasp/modsecurity-crs:4.30-nginx-202611190211
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8080}
+            - {name: deny, containerPort: 8082}
+          env:
+            - {name: MODSEC_RULE_ENGINE, value: "DetectionOnly"}
+            - {name: MODSEC_AUDIT_ENGINE, value: "RelevantOnly"}
+            - {name: MODSEC_AUDIT_LOG_FORMAT, value: "JSON"}
+            - {name: MODSEC_AUDIT_LOG_TYPE, value: "Serial"}
+            - {name: MODSEC_AUDIT_LOG, value: "/dev/stdout"}
+            - {name: MODSEC_AUDIT_LOG_PARTS, value: "ABHZ"}        # 不记录请求体（F/I/J），减少日志量并降低泄露风险
+            - {name: MODSEC_RESP_BODY_ACCESS, value: "Off"}        # 镜像流量没有真实响应
+            - {name: MODSEC_REQ_BODY_LIMIT, value: "13107200"}     # 12.5MiB
+            - {name: MODSEC_REQ_BODY_NOFILES_LIMIT, value: "1048576"}
+            - {name: MODSEC_REQ_BODY_LIMIT_ACTION, value: "ProcessPartial"}
+            - {name: BLOCKING_PARANOIA, value: "1"}                # 站点可以在 before-crs 里覆盖
+            - {name: DETECTION_PARANOIA, value: "2"}
+            - {name: ANOMALY_INBOUND, value: "5"}
+            - {name: ANOMALY_OUTBOUND, value: "4"}
+            - {name: NGINX_ALWAYS_TLS_REDIRECT, value: "off"}
+            - {name: ACCESSLOG, value: "/dev/null"}
+            - {name: ERRORLOG, value: "/dev/stderr"}
+          volumeMounts:
+            # 覆盖镜像自带的 server 模板（envsubst 渲染到 conf.d）
+            - {name: nginx, mountPath: /etc/nginx/templates/conf.d/default.conf.template, subPath: default.conf.template}
+            - {name: nginx, mountPath: /etc/nginx/trusted-proxies.conf, subPath: trusted-proxies.conf}
+            # CRS 前后两个例外入口文件
+            - {name: rules, mountPath: /etc/modsecurity.d/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf, subPath: REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf}
+            - {name: rules, mountPath: /etc/modsecurity.d/owasp-crs/rules/RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf, subPath: RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf}
+            - {name: rules, mountPath: /etc/modsecurity.d/waf}     # 站点规则和自定义规则
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 384Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+      volumes:
+        - name: nginx
+          configMap: {name: crs-detector-nginx}
+        - name: rules
+          configMap: {name: crs-detector-rules}
