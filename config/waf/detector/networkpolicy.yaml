@@ -1,0 +1,13 @@
+# 检测器只接受 Gateway（镜像流量）和本节点 kubelet 探针的访问，
+# 防止集群内其他来源伪造 X-Forwarded-For，把无辜 IP 打进封禁名单
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: crs-detector-ingress
+spec:
+  endpointSelector:
+    matchLabels: {app: crs-detector}
+  ingress:
+    - fromEntities: [ingress, host, remote-node]
+      toPorts:
+        - ports: [{port: "8080", protocol: TCP}, {port: "8082", protocol: TCP}]

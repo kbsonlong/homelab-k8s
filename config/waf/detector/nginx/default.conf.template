@@ -1,0 +1,72 @@
+# crs-detector：只接收 Gateway 镜像流量，只检测不转发，上游是本地返回 204 的空服务
+# 由镜像的 entrypoint 用 envsubst 渲染（只替换已定义的环境变量，$host 等 nginx 变量会保留）
+
+# 去掉 Envoy 镜像请求的 Host 后缀：gitea.kbsonlong.com-shadow → gitea.kbsonlong.com
+map $host $waf_site {
+    ~^(?<h>[^:]+?)(-shadow)?$  $h;
+    default                    $host;
+}
+
+# 真实客户端 IP：Envoy 会把对端地址追加到 X-Forwarded-For 末尾。
+# 只信任 Gateway 所在节点 / Pod 网段，取最右侧不受信任的地址。
+real_ip_header    X-Forwarded-For;
+real_ip_recursive on;
+include /etc/nginx/trusted-proxies.conf;
+
+upstream waf_sink {
+    server 127.0.0.1:8081;
+    keepalive 16;
+}
+
+# 空上游：不加载 ModSecurity，直接返回 204
+server {
+    listen 127.0.0.1:8081;
+    access_log off;
+    modsecurity off;
+    location / { return 204; }
+}
+
+# 封禁响应：waf-console 生成的 waf-blocklist-* HTTPRoute 把被封 IP 的请求转到这里
+log_format waf_deny escape=json '{"waf_deny":true,"time":"$time_iso8601","client_ip":"$http_cf_connecting_ip",'
+                                '"host":"$host","method":"$request_method","uri":"$request_uri","ua":"$http_user_agent"}';
+server {
+    listen 8082;
+    modsecurity off;
+    access_log /dev/stdout waf_deny;
+    default_type text/plain;
+    location = /healthz { access_log off; return 200 "ok\n"; }
+    location / { return 403 "Forbidden by WAF\n"; }
+}
+
+server {
+    listen 8080 default_server;
+    server_name _;
+
+    client_max_body_size 64m;       # 超出直接 413（镜像请求会被丢弃，不影响业务）
+    client_body_buffer_size 128k;
+
+    modsecurity on;
+    modsecurity_rules_file /etc/modsecurity.d/setup.conf;
+
+    location = /healthz {
+        modsecurity off;
+        access_log off;
+        return 200 "ok\n";
+    }
+
+    # Git smart-http：请求体大且多为二进制，跳过检测，节省 CPU
+    location ~ \.git/(git-upload-pack|git-receive-pack|info/refs)$ {
+        modsecurity off;
+        return 204;
+    }
+
+    location / {
+        proxy_pass http://waf_sink;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header X-WAF-Site $waf_site;
+        proxy_request_buffering on;   # 先读完请求体，ModSecurity phase 2 才能检测
+        proxy_connect_timeout 1s;
+        proxy_read_timeout 2s;
+    }
+}

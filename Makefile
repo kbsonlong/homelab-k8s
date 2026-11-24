@@ -31,3 +31,5 @@ render: ## Render generated Gateway manifests into rendered/
 
 destroy: ## Destructive: remove this lab stack only when CONFIRM=destroy is set
 	@$(SCRIPTS)/destroy.sh
+
+include Makefile.waf.mk

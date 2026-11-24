@@ -1,0 +1,26 @@
+# 专门执行 VictoriaLogs（LogsQL）规则的 vmalert
+# 集群里没有现成的 vmalert；如果 victoria-metrics-k8s-stack 打开了 vmalert，可以把 VictoriaLogs 部分合并进去
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlert
+metadata:
+  name: waf
+spec:
+  replicaCount: 1
+  evaluationInterval: 1m
+  # 只加载带 waf 标签的规则，避免和其他规则混在一起
+  ruleSelector:
+    matchLabels: {app.kubernetes.io/part-of: waf}
+  datasource:
+    url: http://vlsingle-vmk8s-victoria-metrics-k8s-stack.monitoring.svc:9428   # TODO: kubectl -n monitoring get svc | grep vlsingle
+  # 指标类规则（检测器健康、Argo CD）查询 VictoriaMetrics
+  remoteRead:
+    url: http://vmsingle-vmk8s-victoria-metrics-k8s-stack.monitoring.svc:8428   # TODO: 核对 vmsingle Service
+  remoteWrite:
+    url: http://vmsingle-vmk8s-victoria-metrics-k8s-stack.monitoring.svc:8428
+  notifiers:
+    - url: http://vmalertmanager-waf.monitoring.svc:9093
+  extraArgs:
+    rule.defaultRuleType: vlogs          # 没写 type 的规则组默认按 LogsQL 处理
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 128Mi}

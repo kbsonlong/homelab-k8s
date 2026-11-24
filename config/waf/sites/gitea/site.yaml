@@ -1,0 +1,12 @@
+# Gitea：git smart-http 已在 nginx 层跳过，这里再兜一层
+name: gitea
+host: gitea.kbsonlong.com
+mode: mirror
+mirrorPercent: 100
+paranoia: 1
+anomaly:
+  inbound: 5
+  outbound: 4
+skipPaths:
+  - '\.git/(git-upload-pack|git-receive-pack|info/refs)$'
+exclusions: []

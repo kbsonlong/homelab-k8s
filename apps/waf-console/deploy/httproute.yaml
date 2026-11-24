@@ -1,0 +1,22 @@
+# 管理后台：只在 LAN 访问。不要把 waf.kbsonlong.com 配进 Cloudflare Tunnel；
+# 即便误配，带 CF-Connecting-IP 的请求（来自 Cloudflare）也会被第一条规则拒绝（403）
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: waf-console
+  namespace: waf
+spec:
+  parentRefs:
+    - name: lab-gateway
+      namespace: cilium-gateway
+      sectionName: http
+  hostnames: ["waf.kbsonlong.com"]
+  rules:
+    - matches:
+        - path: {type: PathPrefix, value: /}
+          headers:
+            - {type: RegularExpression, name: CF-Connecting-IP, value: ".+"}
+      backendRefs:
+        - {name: crs-detector, port: 8082}
+    - backendRefs:
+        - {name: waf-console, port: 80}

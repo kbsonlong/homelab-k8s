@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: waf
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  source:
+    repoURL: https://gitea.kbsonlong.com/kbsonlong/homelab-k8s.git
+    targetRevision: main
+    path: config/waf
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: waf
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true      # 同步时也不覆盖下面忽略的字段
+    retry:
+      limit: 3
+      backoff: {duration: 10s, factor: 2, maxDuration: 2m}
