@@ -26,12 +26,15 @@ jobs:
           for d in config/waf/sites/*/; do n=$(basename "$d"); cp "$d/before-crs.conf" "/tmp/waf/$n-before-crs.conf"; done
           rm -f /tmp/waf/before-crs.conf
           cp config/waf/custom/rules.conf /tmp/waf/custom-rules.conf
+          RULES=/etc/modsecurity.d/owasp-crs/rules
+          RULES900="$RULES/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf"
+          RULES999="$RULES/RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf"
           docker run --rm \
             -e MODSEC_RULE_ENGINE=DetectionOnly -e BLOCKING_PARANOIA=1 \
             -v "$PWD/config/waf/detector/nginx/default.conf.template:/etc/nginx/templates/conf.d/default.conf.template:ro" \
             -v "$PWD/config/waf/detector/nginx/trusted-proxies.conf:/etc/nginx/trusted-proxies.conf:ro" \
-            -v "$PWD/config/waf/detector/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:/etc/modsecurity.d/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:ro" \
-            -v "$PWD/config/waf/detector/RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf:/etc/modsecurity.d/owasp-crs/rules/RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf:ro" \
+            -v "$PWD/config/waf/detector/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:$RULES900:ro" \
+            -v "$PWD/config/waf/detector/RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf:$RULES999:ro" \
             -v "/tmp/waf:/etc/modsecurity.d/waf:ro" \
             owasp/modsecurity-crs:nginx \
             sh -c '/docker-entrypoint.sh nginx -t'

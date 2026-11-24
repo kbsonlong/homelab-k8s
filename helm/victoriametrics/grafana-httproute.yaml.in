@@ -5,6 +5,8 @@ kind: HTTPRoute
 metadata:
   name: grafana-ui
   namespace: monitoring
+  labels:
+    waf.kbsonlong.com/mirror: "true"
 spec:
   parentRefs:
     - name: lab-gateway
@@ -17,8 +19,15 @@ spec:
         - path:
             type: PathPrefix
             value: /
+      # 旁路 WAF（docs/waf.md）：主链路直连后端，RequestMirror 异步复制给 waf/crs-detector
+      # 回滚到串联 WAF：backendRefs 改回 crs-grafana.waf:80，并删除 RequestMirror
+      filters:
+        - type: RequestMirror
+          requestMirror:
+            backendRef:
+              name: crs-detector
+              namespace: waf
+              port: 8080
       backendRefs:
-        # 七层过集群内 WAF (owasp/modsecurity-crs); 回滚: 改回 vmk8s-grafana:80
-        - name: crs-grafana
-          namespace: waf
+        - name: vmk8s-grafana
           port: 80

@@ -26,15 +26,17 @@ spec:
       annotations:
         summary: crs-detector 30 分钟内重启 {{ $value | humanize }} 次
     - alert: WafDetectorOOM
-      expr: kube_pod_container_status_last_terminated_reason{namespace="waf",container="crs-detector",reason="OOMKilled"} == 1
+      expr: kube_pod_container_status_last_terminated_reason{namespace="waf",container="crs-detector",reason="OOMKilled"}
+        == 1
       for: 0s
       labels:
         severity: warning
       annotations:
         summary: crs-detector 被 OOMKilled，考虑调大 limit 或降低 PL / 请求体检查上限
     - alert: WafDetectorCPUThrottled
-      expr: sum(rate(container_cpu_cfs_throttled_periods_total{namespace="waf",container="crs-detector"}[5m])) / sum(rate(container_cpu_cfs_periods_total{namespace="waf",container="crs-detector"}[5m]))
-        > 0.5
+      expr: >-
+        sum(rate(container_cpu_cfs_throttled_periods_total{namespace="waf",container="crs-detector"}[5m]))
+        / sum(rate(container_cpu_cfs_periods_total{namespace="waf",container="crs-detector"}[5m])) > 0.5
       for: 10m
       labels:
         severity: info
@@ -62,7 +64,8 @@ spec:
       annotations:
         summary: Argo CD 应用 {{ $labels.name }} OutOfSync 超过 15 分钟
     - alert: WafGatewayLatencyHigh
-      expr: histogram_quantile(0.99, sum by (le) (rate(envoy_http_downstream_rq_time_bucket{namespace="kube-system"}[5m]))) > 500
+      expr: histogram_quantile(0.99, sum by (le) (rate(envoy_http_downstream_rq_time_bucket{namespace="kube-system"}[5m])))
+        > 500
       for: 10m
       labels:
         severity: warning

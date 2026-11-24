@@ -47,7 +47,8 @@ vlagent:
     k8sCollector:
       enabled: true
       # 只采集 gateway access 日志: cilium-gateway ns + kube-system 的 cilium-envoy pod (gateway 数据面)
-      excludeFilter: "-(kubernetes.pod_namespace:=cilium-gateway or (kubernetes.pod_namespace:=kube-system and kubernetes.pod_name:~\"cilium-envoy.*\"))"
+      excludeFilter: >-
+        -(kubernetes.pod_namespace:=cilium-gateway or (kubernetes.pod_namespace:=kube-system and kubernetes.pod_name:~"cilium-envoy.*"))
     nodeSelector:
       kubernetes.io/hostname: colima
     resources:

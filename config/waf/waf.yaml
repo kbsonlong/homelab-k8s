@@ -80,7 +80,10 @@ spec:
               value: gitea.kbsonlong.com
             # git smart-http 的 content-type 不在 CRS 默认白名单(规则 920420), push/pull 会被拦
             - name: ALLOWED_REQUEST_CONTENT_TYPE
-              value: "|application/x-www-form-urlencoded| |multipart/form-data| |multipart/related| |text/xml| |application/xml| |application/soap+xml| |application/json| |application/cloudevents+json| |application/cloudevents-batch+json| |application/x-git-upload-pack-advertisement| |application/x-git-upload-pack-result| |application/x-git-receive-pack-result|"
+              value: "|application/x-www-form-urlencoded| |multipart/form-data| |multipart/related| |text/xml| |application/xml|
+                |application/soap+xml| |application/json| |application/cloudevents+json| |application/cloudevents-batch+json|
+                |application/x-git-upload-pack-advertisement| |application/x-git-upload-pack-result|
+                |application/x-git-receive-pack-result|"
           ports:
             - containerPort: 8080
               name: http
@@ -129,7 +132,9 @@ spec:
               value: argocd.kbsonlong.com
             # ArgoCD 终端/exec 走 grpc-web, 同样不在 CRS 默认 content-type 白名单
             - name: ALLOWED_REQUEST_CONTENT_TYPE
-              value: "|application/x-www-form-urlencoded| |multipart/form-data| |multipart/related| |text/xml| |application/xml| |application/soap+xml| |application/json| |application/cloudevents+json| |application/cloudevents-batch+json| |application/grpc-web| |application/grpc-web+proto| |application/grpc-web-text| |application/grpc-web-text+proto|"
+              value: "|application/x-www-form-urlencoded| |multipart/form-data| |multipart/related| |text/xml| |application/xml|
+                |application/soap+xml| |application/json| |application/cloudevents+json| |application/cloudevents-batch+json|
+                |application/grpc-web| |application/grpc-web+proto| |application/grpc-web-text| |application/grpc-web-text+proto|"
           ports:
             - containerPort: 8080
               name: http

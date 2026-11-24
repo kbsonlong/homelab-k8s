@@ -49,8 +49,12 @@ spec:
             - {name: nginx, mountPath: /etc/nginx/templates/conf.d/default.conf.template, subPath: default.conf.template}
             - {name: nginx, mountPath: /etc/nginx/trusted-proxies.conf, subPath: trusted-proxies.conf}
             # CRS 前后两个例外入口文件
-            - {name: rules, mountPath: /etc/modsecurity.d/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf, subPath: REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf}
-            - {name: rules, mountPath: /etc/modsecurity.d/owasp-crs/rules/RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf, subPath: RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf}
+            - name: rules
+              mountPath: /etc/modsecurity.d/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf
+              subPath: REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf
+            - name: rules
+              mountPath: /etc/modsecurity.d/owasp-crs/rules/RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf
+              subPath: RESPONSE-999-EXCLUSION-RULES-AFTER-CRS.conf
             - {name: rules, mountPath: /etc/modsecurity.d/waf}     # 站点规则和自定义规则
           readinessProbe:
             httpGet: {path: /healthz, port: http}
