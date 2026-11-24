@@ -32,6 +32,7 @@ VIP 192.168.3.241  (四层例外)
 - `docs/01-from-vm-to-k3s.md`：新人教程索引；每个阶段拆在 `docs/01-*.md` 至 `docs/15-*.md`
 - `docs/deployment.md`：已有 k3s 集群的应用部署步骤、代理、密码和回滚
 - `docs/operations.md`：日常运维、扩展 HTTPRoute、四层服务和故障排查
+- `apps/xiaozhi-server/`：Colima 节点的 Xiaozhi ESP32 server 部署配置与恢复说明。
 - `docs/gateway-access-log.md`：Gateway HTTP 访问日志（JSON → Envoy stdout）配置、查询与回滚
 - `docs/vm100-side-router-v2ray-iptables.md`：VM100 旁路由、v2ray、iptables/ipset、DNS 流量路径与验收说明
 - `docs/aivision-kubernetes.md`：AI Vision 迁移到 Kubernetes 的资源清单、迁移步骤与回滚

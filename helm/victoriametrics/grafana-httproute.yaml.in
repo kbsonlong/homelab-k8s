@@ -18,5 +18,7 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: vmk8s-grafana
+        # 七层过集群内 WAF (owasp/modsecurity-crs); 回滚: 改回 vmk8s-grafana:80
+        - name: crs-grafana
+          namespace: waf
           port: 80

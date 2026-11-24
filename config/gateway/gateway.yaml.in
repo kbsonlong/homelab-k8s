@@ -46,7 +46,9 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: argo-cd-argocd-server
+        # 七层过集群内 WAF (owasp/modsecurity-crs); 回滚: 改回 argo-cd-argocd-server:80
+        - name: crs-argocd
+          namespace: waf
           port: 80
 ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -74,8 +76,10 @@ spec:
               - name: X-Forwarded-Proto
                 value: https
       backendRefs:
-        - name: gitea-http
-          port: 3000
+        # 七层过集群内 WAF (owasp/modsecurity-crs); 回滚: 改回 gitea-http:3000
+        - name: crs-gitea
+          namespace: waf
+          port: 80
 ---
 # HTTP access log: JSON -> cilium-envoy DaemonSet stdout (verified 2026-10-16, Cilium 1.20.2).
 # Query/rollback: docs/gateway-access-log.md. NOTE: CRD is v2alpha1, re-check on Cilium upgrades.
