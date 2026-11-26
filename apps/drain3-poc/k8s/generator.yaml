@@ -16,6 +16,6 @@ spec:
         command: ["python", "/app/generate.py"]
         env:
         - {name: SIDECAR_URL, value: "http://drain3-sidecar:9800"}
-        - {name: DURATION, value: "240"}    # 总时长 4 分钟
-        - {name: ATTACK_AT, value: "60"}    # 60s 注入攻击模板
+        - {name: DURATION, value: "420"}    # 总时长 7 分钟
+        - {name: ATTACK_AT, value: "200"}   # 200s 注入攻击(前 3 个整分钟桶为 calm 冷启动期)
         - {name: RATE, value: "20"}         # 基线 20 行/秒

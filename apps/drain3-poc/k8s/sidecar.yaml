@@ -30,7 +30,8 @@ spec:
         imagePullPolicy: IfNotPresent
         env:
         - name: PG_DSN
-          value: host=postgres dbname=anomaly user=drain3 password=drain3poc        - {name: SOURCE_HOST_LABEL, value: "nginx-poc-01"}
+          value: host=postgres dbname=anomaly user=drain3 password=drain3poc
+        - {name: SOURCE_HOST_LABEL, value: "nginx-poc-01"}
         - {name: FLUSH_INTERVAL, value: "60"}
         - {name: RELOAD_INTERVAL, value: "60"}
         ports: [{containerPort: 9800}]

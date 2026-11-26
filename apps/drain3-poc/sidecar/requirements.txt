@@ -3,3 +3,4 @@ uvicorn==0.34.0
 drain3==0.9.11
 psycopg2-binary==2.9.10
 requests==2.32.3
+river==0.27.0

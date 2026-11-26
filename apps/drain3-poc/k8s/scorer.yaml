@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anomaly-scorer
+  namespace: anomaly-poc
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: anomaly-scorer}
+  template:
+    metadata:
+      labels: {app: anomaly-scorer}
+    spec:
+      containers:
+        - name: scorer
+          image: drain3-sidecar:poc   # 复用同一镜像,换入口
+          command: ["python", "/app/scorer.py"]
+          env:
+            - name: PG_DSN
+              value: host=postgres dbname=anomaly user=drain3 password=drain3poc
+            - name: COLD_START_BUCKETS
+              value: "3"
+            - name: Z_ALERT
+              value: "5.0"

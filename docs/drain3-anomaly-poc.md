@@ -35,7 +35,7 @@ docker build -t drain3-sidecar:poc -f docker/Dockerfile ./sidecar
 kind load docker-image drain3-sidecar:poc --name poc
 kubectl apply -f k8s/
 
-# 观察 generator 完成后（约4分钟）:
+# 观察 generator 完成后（Stage 1 约4分钟；Stage 2 约7分钟）:
 kubectl -n anomaly-poc exec deploy/postgres -- psql -U drain3 -d anomaly \
   -c "SELECT id,template,status,count(*) FROM drain3_templates GROUP BY 1,2,3 ORDER BY 1"
 
@@ -79,3 +79,59 @@ kind delete cluster --name poc
 3. Dockerfile 必须设 `WORKDIR`，否则 `uvicorn app:app` 会 import 到同名目录（namespace package）
 4. status 不进 Drain3 消息（避免同路径不同状态码碎片化），只进计数器列
 5. drain3 0.9.11 无 `get_num_cluster_ids`/`cfg.set()`，配置走 `cfg.drain_sim_th/drain_depth` 属性
+
+---
+
+# Stage 2：anomaly-scorer 流式异常评分（防污染双层基线）✅
+
+> 核心原则：**异常分数可以实时生成，模型基线不能无条件实时更新。** 使用隔离的稳定基线、候选基线以及人工确认反馈，防止恶意行为逐渐污染正常模型。
+
+## 架构（Stage 1 之上追加）
+
+```
+drain3_template_counts (分钟桶聚合)
+      │ 每 60s (anomaly-scorer Deployment, 独立入口 python /app/scorer.py)
+      ▼
+特征: qps / err_5xx_ratio / new_templates
+      │
+      ├─ stable 基线: 前 3 个 calm 桶拟合 per-feature median/MAD robust-z → 冻结写入 PG scorer_state, 永不更新
+      ├─ candidate 基线: river.stats RollingQuantile(0.5)+RollingIQR(w=20), 仅 calm 期 update
+      │    (calm 判定 = stable 不告警 且 new_templates==0; 攻击期零更新 + candidate_updated 审计列留痕)
+      └─ final = max(stable_z, cand_z) / Z_NORM_CAP(10) 封顶 1.0; Z_ALERT=5.0 → 🚨ALERT
+      ▼
+PG anomaly_scores (bucket, features, stable_z, cand_z, final_score, candidate_updated)
+```
+
+设计要点：
+- **stable 抓慢攻击/渐进漂移**（永不漂移）；**candidate 跟随合法流量变化**（合法变更人工确认后自然吸收）——两层互补
+- robust-z 公式：`0.6745×|x−med|/mad`，MAD 退化回退 `max(mad, |med|×5%, 0.01)`
+- candidate spread：`max(iqr×0.7413, |med|×5%, 0.01)`；样本不足时回退 stable 评分
+- River `anomaly.HalfSpaceTrees` 经实测**弃用**：设计场景为逐事件高频流，1 样本/分钟节奏下加 MinMaxScaler 仍不可分（calm 0.9486 反而最高）；生产若逐事件接入可回评
+
+## 时序参数（k8s/generator.yaml）
+
+`DURATION=420 / ATTACK_AT=200`：保证前 3 个整分钟桶为纯 calm 冷启动期；scorer `COLD_START_BUCKETS=3`，冷启动期只采桶不评分。
+
+## Stage 2 验证结果（2026-11-26 实测）
+
+| bucket (UTC) | qps | new_tpl | stable_z | final | candidate_updated |
+|---|---|---|---|---|---|
+| calm | 1200 | 0 | 0.0 | 0.000 | t |
+| 攻击首桶 | 2225 | **3** | **202.4** | 1.000 🚨 | **f** |
+| 攻击×3 | 3613–3671 | 0 | 27.1–27.8 | 1.000 🚨 | **f** |
+| 恢复尾桶 | 964 | 0 | 2.7 | 0.265 | t |
+
+1. 基线低分 ✓（calm 0.0，恢复 0.265 不误报）
+2. 攻击超阈 ✓（new_templates 出现即 z=202，纯流量放大 z≈27，连续 4 桶 ALERT）
+3. candidate 攻击期零更新 ✓（`candidate_updated` 审计列：攻击 4 桶全 f，仅 calm 前后 t）
+4. stable 冻结 ✓（`[COLD-START-DONE] baseline FROZEN`，MAD 回退生效无退化误报）
+5. 重启恢复 ✓（`recovered frozen baseline + candidate from PG (restart, no re-cold-start)`）
+
+## Stage 2 踩坑记录
+
+1. **MAD 退化误报**：合成基线 qps 恒值 → MAD=0 → 微小偏差 z=13.5 假告警 → 回退 `max(mad, |med|×5%, 0.01)`
+2. **River 滚动统计空窗口**：未学习过时 `RollingQuantile/IQR.get()` 返回 **None**（不是 0），直接参与计算 TypeError 崩溃 → 必须判 None
+3. **PG 长连接旧快照**：psycopg2 默认 autocommit=False，scorer 常驻连接 idle-in-transaction——既看不到其他进程新提交的数据（评分"empty"假象），又持有锁阻塞 TRUNCATE → `conn.autocommit = True`
+4. **表 schema 漂移**：POC 迭代改列名后 `CREATE TABLE IF NOT EXISTS` 不生效 → ensure_tables 检测缺列则 DROP 重建（生产应用 ALTER 迁移）
+5. **HalfSpaceTrees 不可用于分钟桶**（见上，已换 RollingQuantile/IQR）
+6. kind load 后 `crictl images` 显示旧 hash 有误导，以 pod 内 `exec grep <新代码特征串>` 为准
