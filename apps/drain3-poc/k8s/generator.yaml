@@ -5,7 +5,7 @@ metadata:
   namespace: anomaly-poc
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 600
+  activeDeadlineSeconds: 1000
   template:
     spec:
       restartPolicy: Never
@@ -16,6 +16,12 @@ spec:
         command: ["python", "/app/generate.py"]
         env:
         - {name: SIDECAR_URL, value: "http://drain3-sidecar:9800"}
-        - {name: DURATION, value: "420"}    # 总时长 7 分钟
-        - {name: ATTACK_AT, value: "200"}   # 200s 注入攻击(前 3 个整分钟桶为 calm 冷启动期)
-        - {name: RATE, value: "20"}         # 基线 20 行/秒
+        - {name: DURATION, value: "900"}        # Stage 3: 总时长 15 分钟
+        - {name: RATE, value: "20"}             # calm 基线 20 行/秒
+        # 合法变更相位: qps x2 + 新端点上线(未确认时应告警, 人工确认后静默)
+        - {name: LEGIT_SURGE_AT, value: "240"}
+        - {name: SURGE_MULT, value: "2.0"}
+        - {name: LEGIT_PATH, value: "/api/v2/checkout"}
+        # 慢速爬坡攻击相位: 对已有端点每秒 +0.15 行(candidate 吸收, stable 拦截)
+        - {name: RAMP_AT, value: "600"}
+        - {name: RAMP_SLOPE, value: "0.15"}

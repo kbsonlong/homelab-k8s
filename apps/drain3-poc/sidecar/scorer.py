@@ -7,7 +7,14 @@
   (cand_z 低、stable_z 不告警、无新模板)才 update;攻击期零更新,审计留痕。
   两者互补: stable 永不漂移(慢攻击/渐进漂移靠它持续告警),candidate 跟随
   合法流量变化(合法变更人工确认后自然吸收)。
-- final = max(stable_norm, cand_norm),归一化 z/10 封顶 1.0。
+- final = max(stable_z, cand_z),归一化 z/10 封顶 1.0。
+
+Stage 3 — 人工确认反馈闭环:
+- baseline_feedback PG 表: 运维人工插入 action='approve_refit' → scorer 从最近
+  REFIT_WINDOW 个已评分桶重训 stable 并重新冻结(带 [REFIT-APPROVED] 审计日志,
+  applied_at 落表)。这是唯一允许 stable 基线变更的通道——基线只能经人工确认更新。
+- 场景验证: 合法流量变更未确认时持续告警(正确), 人工确认后静默(反馈生效);
+  慢速爬坡攻击 candidate 会吸收(被污染)但 stable 冻结基线持续拦截(煮青蛙检测)。
 
 注: 评估过 River anomaly.HalfSpaceTrees,其设计场景为逐事件高频流,
 在 1 样本/分钟的 POC 节奏下无统计意义(calm/attack 分数不可分),
@@ -34,6 +41,8 @@ COLD_START_BUCKETS = int(os.getenv("COLD_START_BUCKETS", "3"))
 Z_ALERT = float(os.getenv("Z_ALERT", "5.0"))        # stable robust-z 告警线
 Z_NORM_CAP = 10.0                                    # z 归一化上限(z=10 -> 1.0)
 CAND_GATE = float(os.getenv("CAND_GATE", "3.5"))    # candidate 更新门槛(cand_z < 3.5)
+REFIT_WINDOW = int(os.getenv("REFIT_WINDOW", "3"))  # approve_refit 重训窗口(最近 N 桶)
+TICK_SECOND = int(os.getenv("TICK_SECOND", "50"))   # 每分钟第几秒采样(须晚于 sidecar flush 相位)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("scorer")
@@ -72,6 +81,15 @@ def ensure_tables(c):
                 key TEXT PRIMARY KEY, value BYTEA,
                 updated_at TIMESTAMPTZ DEFAULT now())
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS baseline_feedback (
+                id BIGSERIAL PRIMARY KEY,
+                action TEXT NOT NULL,          -- 目前支持 approve_refit
+                note TEXT,
+                created_by TEXT,
+                created_at TIMESTAMPTZ DEFAULT now(),
+                applied_at TIMESTAMPTZ)        -- NULL = 待 scorer 处理
+        """)
     c.commit()
 
 
@@ -97,6 +115,18 @@ def last_closed_bucket(now):
     """上一个已结束的整分钟桶."""
     return (now - timedelta(seconds=now.second, microseconds=now.microsecond)
             ).replace(tzinfo=timezone.utc) - timedelta(minutes=1)
+
+
+def sleep_to_tick():
+    """对齐到每分钟 TICK_SECOND 秒采样.
+
+    相位竞态教训: sidecar flush 是启动锚定的 60s 周期, 若 scorer 采样点
+    早于 flush 点, 永远读到'空桶'(Stage 3 排查确认). 对齐到 :50s 并保留
+    空桶重试兜底.
+    """
+    now = datetime.now(timezone.utc)
+    target = (now + timedelta(minutes=1)).replace(second=TICK_SECOND, microsecond=0)
+    time.sleep(max(1.0, (target - now).total_seconds()))
 
 
 def fetch_features(c, bucket):
@@ -128,6 +158,46 @@ def fit_stable(window):
         mad = max(mad, abs(med) * 0.05, 0.01)
         base[f] = {"med": med, "mad": mad}
     return base
+
+
+def process_feedback(c, stable, cand, hist):
+    """人工反馈通道: baseline_feedback 中待处理行 → approve_refit 重训 stable.
+
+    这是 stable 基线唯一的变更通道; 重训窗口 = 最近 REFIT_WINDOW 个已评分桶,
+    窗口不足时保留待处理(不吞掉人工指令)。
+    candidate 同步重置并用同一窗口重播种: candidate 在合法变更期被门控挡住
+    没学到新水位, 若不重播种会永久停在旧基线上持续误报(Stage 3 实测踩坑)。
+    """
+    with c.cursor() as cur:
+        cur.execute("""
+            SELECT id, action FROM baseline_feedback
+            WHERE applied_at IS NULL ORDER BY id
+        """)
+        pending = cur.fetchall()
+    for fid, action in pending:
+        if action != "approve_refit":
+            LOG.warning("[FEEDBACK] id=%s unknown action=%r, skip", fid, action)
+            continue
+        if len(hist) < REFIT_WINDOW:
+            LOG.warning("[FEEDBACK] id=%s approve_refit but history %d < %d, retry next tick",
+                        fid, len(hist), REFIT_WINDOW)
+            continue
+        window = hist[-REFIT_WINDOW:]
+        stable = fit_stable(window)
+        state_put(c, "stable_baseline", stable)
+        cand = new_candidate()
+        for w in window:
+            for f, x in w.items():
+                if f in cand:
+                    cand[f][0].update(x)
+                    cand[f][1].update(x)
+        state_put(c, "candidate_model", cand)
+        with c.cursor() as cur:
+            cur.execute("UPDATE baseline_feedback SET applied_at=now() WHERE id=%s", (fid,))
+        LOG.info("[REFIT-APPROVED] feedback id=%s stable re-frozen + candidate re-seeded "
+                 "from last %d buckets: %s", fid, REFIT_WINDOW,
+                 json.dumps(stable, default=str))
+    return stable, cand
 
 
 def new_candidate():
@@ -168,18 +238,26 @@ def main():
     stable = state_get(c, "stable_baseline")
     cand = state_get(c, "candidate_model") or new_candidate()
     cold_window = state_get(c, "cold_window") or []
+    hist = state_get(c, "feature_history") or []     # 已评分桶特征(供 approve_refit 重训)
     cold_done = stable is not None
     if cold_done:
         LOG.info("recovered frozen baseline + candidate from PG (restart, no re-cold-start)")
 
     while True:
-        time.sleep(INTERVAL)
+        sleep_to_tick()
         b = last_closed_bucket(datetime.now(timezone.utc))
 
         feat, n_new = fetch_features(c, b)
         if feat["qps"] == 0:
-            LOG.info("bucket %s empty, skip", b)
-            continue
+            # 兜底: flush 相位可能晚于采样点, 等 30s 重试一次
+            time.sleep(30)
+            feat, n_new = fetch_features(c, b)
+            if feat["qps"] == 0:
+                LOG.info("bucket %s empty, skip", b)
+                continue
+
+        # --- 人工反馈通道(每 tick 检查, 先于评分) ---
+        stable, cand = process_feedback(c, stable, cand, hist)
 
         # --- stable 冻结基线 ---
         if not cold_done:
@@ -223,6 +301,10 @@ def main():
             """, (b, feat["qps"], feat["err_5xx_ratio"], int(n_new),
                   round(stable_z, 2), round(cand_z, 2), final, updated))
         c.commit()
+
+        hist.append(feat)                            # 保留最近 30 桶供 approve_refit
+        hist = hist[-30:]
+        state_put(c, "feature_history", hist)
 
         LOG.info("[SCORE] bucket=%s qps=%d err5xx=%.3f new_tpl=%d "
                  "stable_z=%.1f(top=%s) cand_z=%.1f(top=%s) FINAL=%s %s",

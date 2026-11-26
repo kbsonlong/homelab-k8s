@@ -135,3 +135,46 @@ PG anomaly_scores (bucket, features, stable_z, cand_z, final_score, candidate_up
 4. **表 schema 漂移**：POC 迭代改列名后 `CREATE TABLE IF NOT EXISTS` 不生效 → ensure_tables 检测缺列则 DROP 重建（生产应用 ALTER 迁移）
 5. **HalfSpaceTrees 不可用于分钟桶**（见上，已换 RollingQuantile/IQR）
 6. kind load 后 `crictl images` 显示旧 hash 有误导，以 pod 内 `exec grep <新代码特征串>` 为准
+7. **kind load 不更新同名 tag**：节点 ctr 里 tag 引用可能仍指旧镜像 ID（kubelet IfNotPresent 拿旧镜像）→ 用 `docker save <img> | docker exec -i <node> ctr --namespace=k8s.io images import -` 手动导入并以 `ctr images list` 核对 ID
+
+---
+
+# Stage 3：人工确认反馈闭环 + 慢速爬坡检测（防污染原则收口）✅
+
+> 补齐原则最后一块：**基线只能经人工确认更新。** 并验证冻结基线对"温水煮青蛙"式慢攻击的拦截。
+
+## 场景时序（generator 多相位，DURATION=900）
+
+| 相位 | 时间 | 内容 | 预期 |
+|------|------|------|------|
+| calm | 0–240s | 20 行/s 基线 | 冷启动 3 桶冻结 |
+| LEGIT_SURGE_AT=240 | 240s 起 | qps×2 + 新端点 /api/v2/checkout 上线 | **未确认 → 持续 ALERT**（正确） |
+| 人工确认 | ~470s | SQL: 模板 confirmed + `INSERT baseline_feedback('approve_refit')` | 60s 内重训 → **静默** |
+| RAMP_AT=600 | 600s 起 | 对已有端点每秒 +0.15 行线性爬坡 | candidate 渐升不越阈，**stable 冻结基线越阈持续 ALERT** |
+
+## 反馈闭环机制（scorer）
+
+- PG 表 `baseline_feedback(id, action, note, created_by, created_at, applied_at)`——**stable 基线唯一的变更通道**
+- `action='approve_refit'`：从最近 REFIT_WINDOW=3 个已评分桶重训 stable（median 对混合桶鲁棒）并重新冻结；candidate 同步重置 + 同窗口重播种（否则 candidate 停在旧水位永久误报）
+- `applied_at` 落表 + `[REFIT-APPROVED]` 日志 = 审计留痕；窗口不足时保留待处理不吞指令
+- 采样对齐：scorer 每 tick 对齐到每分钟 `TICK_SECOND=50`s（sidecar flush 是启动锚定周期，采样点早于 flush 点会永远读到空桶）+ 空桶 30s 重试兜底
+
+## Stage 3 验证结果（2026-11-26 实测，13 桶）
+
+| 相位 | qps | stable_z | candidate_updated | 结果 |
+|------|-----|----------|-------------------|------|
+| calm | 1200–1220 | 0.0–0.2 | t | FINAL 0.02 |
+| surge 未确认 | 2640–2684 (+new_tpl) | 16.2–67.5 | f | 持续 🚨ALERT（正确） |
+| approve 后 | 2640–2684 | 0.0–0.2 | t | FINAL 1.0 → **0.0 静默** |
+| 爬坡 | 2655→3094→3587→4125 | 0.1→2.3→4.8→**7.6** | t→f | z=4.8 精准卡在阈下；+56% 越阈持续 🚨ALERT |
+
+1. 合法变更闭环 ✓（告警→确认→静默，全程 ≤2 tick）
+2. 基线变更唯一通道=人工确认 ✓（feedback 表 + applied_at 审计）
+3. 煮青蛙拦截 ✓（candidate 渐升吸收，stable 冻结基线越阈拦截）
+4. 攻击期 candidate 零更新审计 ✓
+
+## Stage 3 踩坑记录
+
+1. **flush/tick 相位竞态**：sidecar flush 周期启动锚定，scorer 采样点早于 flush 点 → 每个桶都"空"（Stage 3 首跑全空桶真因）→ 采样对齐 :50s + 空桶重试
+2. **approve_refit 后 candidate 必须重播种**：合法变更期 candidate 被门控挡住未学到新水位，只重训 stable 会永久 cand_z≈16 误报（首轮实测）→ 重训时同步重置 candidate
+3. 重试消耗 tick 周期可能跳过一个桶（POC 可接受；生产应改为独立重试队列）
