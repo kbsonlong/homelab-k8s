@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: drain3-state
+  namespace: anomaly-poc
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: drain3-sidecar
+  namespace: anomaly-poc
+spec:
+  replicas: 1          # 模板树单写者,硬约束
+  strategy:
+    type: Recreate     # 滚更先停旧,杜绝双写窗口
+  selector:
+    matchLabels: {app: drain3-sidecar}
+  template:
+    metadata:
+      labels: {app: drain3-sidecar}
+    spec:
+      containers:
+      - name: sidecar
+        image: drain3-sidecar:poc
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: PG_DSN
+          value: host=postgres dbname=anomaly user=drain3 password=drain3poc        - {name: SOURCE_HOST_LABEL, value: "nginx-poc-01"}
+        - {name: FLUSH_INTERVAL, value: "60"}
+        - {name: RELOAD_INTERVAL, value: "60"}
+        ports: [{containerPort: 9800}]
+        volumeMounts:
+        - {name: state, mountPath: /data}
+        readinessProbe:
+          httpGet: {path: /health, port: 9800}
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: state
+        persistentVolumeClaim: {claimName: drain3-state}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: drain3-sidecar
+  namespace: anomaly-poc
+spec:
+  selector: {app: drain3-sidecar}
+  ports: [{port: 9800, targetPort: 9800}]

@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: log-generator
+  namespace: anomaly-poc
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: generator
+        image: drain3-sidecar:poc       # 同镜像,换入口
+        imagePullPolicy: IfNotPresent
+        command: ["python", "/app/generate.py"]
+        env:
+        - {name: SIDECAR_URL, value: "http://drain3-sidecar:9800"}
+        - {name: DURATION, value: "240"}    # 总时长 4 分钟
+        - {name: ATTACK_AT, value: "60"}    # 60s 注入攻击模板
+        - {name: RATE, value: "20"}         # 基线 20 行/秒
