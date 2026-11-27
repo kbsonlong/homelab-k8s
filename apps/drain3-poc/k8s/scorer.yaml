@@ -4,7 +4,7 @@ metadata:
   name: anomaly-scorer
   namespace: anomaly-poc
 spec:
-  replicas: 1
+  replicas: 1  # POC scorer; scores are stored in PG, no external alert delivery
   strategy:
     type: Recreate
   selector:
@@ -15,12 +15,12 @@ spec:
     spec:
       containers:
         - name: scorer
-          image: drain3-sidecar:poc   # 复用同一镜像,换入口
-          command: ["python", "/app/scorer.py"]
+          image: drain3-sidecar:v2-poc   # 复用同一镜像,换入口
+          command: ["python", "/app/scorer_v2.py", "run"]
           env:
             - name: PG_DSN
               value: host=postgres dbname=anomaly user=drain3 password=drain3poc
-            - name: COLD_START_BUCKETS
-              value: "3"
-            - name: Z_ALERT
-              value: "5.0"
+            - name: ALLOWED_LATENESS_SECONDS
+              value: "120"
+            - name: ALERT_Z
+              value: "5"

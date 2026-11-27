@@ -1,0 +1,15 @@
+// Local smoke test only; sidecar resolves via the isolated Docker network.
+loki.write "poc" {
+  endpoint {
+    url = "http://sidecar:9800/loki/api/v1/push"
+    batch_wait = "1s"
+  }
+}
+loki.source.api "input" {
+  http {
+    listen_address = "0.0.0.0"
+    listen_port = 9999
+  }
+  use_incoming_timestamp = true
+  forward_to = [loki.write.poc.receiver]
+}

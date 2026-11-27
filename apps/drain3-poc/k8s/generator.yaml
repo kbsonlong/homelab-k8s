@@ -11,7 +11,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: generator
-        image: drain3-sidecar:poc       # 同镜像,换入口
+        image: drain3-sidecar:v2-poc       # 同镜像,换入口
         imagePullPolicy: IfNotPresent
         command: ["python", "/app/generate.py"]
         env:
