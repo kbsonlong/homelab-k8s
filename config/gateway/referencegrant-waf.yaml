@@ -1,0 +1,13 @@
+# 允许业务命名空间的 HTTPRoute 把请求镜像到 waf/crs-detector
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-mirror-to-crs-detector
+  namespace: waf
+spec:
+  from:
+    - {group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: argocd}
+    - {group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: gitea}
+    - {group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: monitoring}
+  to:
+    - {group: "", kind: Service, name: crs-detector}

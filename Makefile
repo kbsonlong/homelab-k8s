@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 SCRIPTS := scripts
 
-.PHONY: help check plan bootstrap deploy verify status render destroy
+.PHONY: help check plan bootstrap deploy verify status render destroy kind-poc
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "%-12s %s\n", $$1, $$2}'
@@ -31,5 +31,8 @@ render: ## Render generated Gateway manifests into rendered/
 
 destroy: ## Destructive: remove this lab stack only when CONFIRM=destroy is set
 	@$(SCRIPTS)/destroy.sh
+
+kind-poc: ## Create local kind POC with VictoriaMetrics, Grafana, and WAF (no Argo CD/Gitea)
+	@$(SCRIPTS)/kind-poc.sh
 
 include Makefile.waf.mk

@@ -1,0 +1,25 @@
+# Gateway 层封禁：静态策略（由 Argo CD 管理）+ 动态名单（由 waf-console 修改）
+# Argo CD Application 必须对 waf-blocklist 配置 ignoreDifferences，否则 selfHeal 会把名单清空
+apiVersion: cilium.io/v2alpha1        # Cilium 1.20 如果已经是 v2，这里改成 v2（验证脚本会提示）
+kind: CiliumCIDRGroup
+metadata:
+  name: waf-blocklist
+  labels: {app.kubernetes.io/managed-by: waf-console}
+spec:
+  externalCIDRs: []
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: waf-gateway-deny
+spec:
+  description: "Deny WAF-blocked client IPs at Cilium Gateway (reserved:ingress)"
+  endpointSelector:
+    matchExpressions:
+      - {key: "reserved:ingress", operator: Exists}
+  ingressDeny:
+    - fromCIDRSet:
+        - cidrGroupRef: waf-blocklist
+  # 选中 reserved:ingress 以后默认变为拒绝，所以要显式放行其他来源
+  ingress:
+    - fromEntities: [world, cluster]

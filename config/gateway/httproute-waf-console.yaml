@@ -1,0 +1,16 @@
+# 管理后台：只在局域网访问，不挂镜像，避免规则写错后连自己的控制台都被影响
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: waf-console
+  namespace: waf
+spec:
+  parentRefs:
+    - name: homelab-gateway              # TODO
+      namespace: gateway                 # TODO
+      sectionName: https
+  hostnames: ["waf.kbsonlong.com"]
+  rules:
+    - backendRefs:
+        - name: waf-console
+          port: 80
